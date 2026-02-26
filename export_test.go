@@ -138,7 +138,7 @@ func TestConflictDetectionAndPrecedence(t *testing.T) {
 
 func TestBuildFusionAuthUsers(t *testing.T) {
 	log := zaptest.NewLogger(t)
-	appIDs := map[string]string{"us1": "app-us1-id", "eu1": "app-eu1-id", "ap1": "app-ap1-id"}
+	appID := "app-id"
 	tenantID := "tenant-id"
 	precedence := []string{"us1", "eu1", "ap1"}
 	hash := []byte("$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy")
@@ -150,17 +150,17 @@ func TestBuildFusionAuthUsers(t *testing.T) {
 			FullName: "Alice Smith", PasswordHash: hash,
 			Status: 1, CreatedAt: time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC), SatelliteName: "us1",
 		}
-		faUser, skip, _ := buildFusionAuthUser(log, primary, []RawUser{primary}, false, appIDs, tenantID)
+		faUser, skip, _ := buildFusionAuthUser(log, primary, []RawUser{primary}, false, appID, tenantID)
 		require.False(t, skip)
 		require.Equal(t, "bcrypt", faUser.EncryptionScheme)
 		require.Equal(t, 10, faUser.Factor)
 		require.Equal(t, "N9qo8uLOickgx2ZMRZoMye", faUser.Salt)
 		require.Len(t, faUser.Registrations, 1)
-		require.Equal(t, "app-us1-id", faUser.Registrations[0].ApplicationID)
+		require.Equal(t, appID, faUser.Registrations[0].ApplicationID)
 		require.Equal(t, id.String(), faUser.Data["storjUserId"])
 	})
 
-	t.Run("conflict exports no password and single registration for primary satellite", func(t *testing.T) {
+	t.Run("conflict exports no password and single registration", func(t *testing.T) {
 		users := []RawUser{
 			{ID: testrand.UUID(), Email: "bob@example.com", NormalizedEmail: "BOB@EXAMPLE.COM",
 				PasswordHash: hash, Status: 1, SatelliteName: "us1"},
@@ -168,11 +168,11 @@ func TestBuildFusionAuthUsers(t *testing.T) {
 				PasswordHash: hash, Status: 1, SatelliteName: "eu1"},
 		}
 		primary := PrimaryUser(users, precedence)
-		faUser, skip, _ := buildFusionAuthUser(log, primary, users, true, appIDs, tenantID)
+		faUser, skip, _ := buildFusionAuthUser(log, primary, users, true, appID, tenantID)
 		require.False(t, skip)
 		require.Empty(t, faUser.Password)
 		require.Len(t, faUser.Registrations, 1)
-		require.Equal(t, "app-us1-id", faUser.Registrations[0].ApplicationID)
+		require.Equal(t, appID, faUser.Registrations[0].ApplicationID)
 		require.Equal(t, true, faUser.Data["isConflictUser"])
 		conflictSats, ok := faUser.Data["conflictSatellites"].([]string)
 		require.True(t, ok)
@@ -181,7 +181,7 @@ func TestBuildFusionAuthUsers(t *testing.T) {
 
 	t.Run("skip user without password hash", func(t *testing.T) {
 		primary := RawUser{ID: testrand.UUID(), Email: "nohash@example.com", Status: 1, SatelliteName: "us1"}
-		_, skip, reason := buildFusionAuthUser(log, primary, []RawUser{primary}, false, appIDs, tenantID)
+		_, skip, reason := buildFusionAuthUser(log, primary, []RawUser{primary}, false, appID, tenantID)
 		require.True(t, skip)
 		require.Equal(t, "no_hash", reason)
 	})
@@ -192,7 +192,7 @@ func TestBuildFusionAuthUsers(t *testing.T) {
 			Status: 1, MFAEnabled: true, MFASecretKey: "JBSWY3DPEHPK3PXP",
 			MFARecoveryCodes: []string{"code1", "code2"}, SatelliteName: "us1",
 		}
-		faUser, skip, _ := buildFusionAuthUser(log, primary, []RawUser{primary}, false, appIDs, tenantID)
+		faUser, skip, _ := buildFusionAuthUser(log, primary, []RawUser{primary}, false, appID, tenantID)
 		require.False(t, skip)
 		require.NotNil(t, faUser.TwoFactor)
 		require.Len(t, faUser.TwoFactor.Methods, 1)
@@ -208,7 +208,7 @@ func TestBuildFusionAuthUsers(t *testing.T) {
 				PasswordHash: hash, Status: 1, SatelliteName: "us1",
 			}},
 		})
-		faUsers, _, stats := buildAllFusionAuthUsers(log, idx, appIDs, precedence, tenantID, nil)
+		faUsers, _, stats := buildAllFusionAuthUsers(log, idx, appID, precedence, tenantID, nil)
 		require.Empty(t, faUsers)
 		require.Equal(t, 1, stats.SkippedSSO)
 	})
@@ -222,7 +222,7 @@ func TestBuildFusionAuthUsers(t *testing.T) {
 					PasswordHash: hash, Status: 1, SatelliteName: "us1"},
 			},
 		})
-		faUsers, _, stats := buildAllFusionAuthUsers(log, idx, appIDs, precedence, tenantID, []string{"storj.io"})
+		faUsers, _, stats := buildAllFusionAuthUsers(log, idx, appID, precedence, tenantID, []string{"storj.io"})
 		require.Len(t, faUsers, 1)
 		require.Equal(t, "external@example.com", faUsers[0].Email)
 		require.Equal(t, 1, stats.SkippedDomain)

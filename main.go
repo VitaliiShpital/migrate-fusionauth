@@ -13,11 +13,10 @@ import (
 	"storj.io/common/process"
 )
 
-// SatelliteConfig holds per-satellite CSV and FusionAuth application configuration.
+// SatelliteConfig holds per-satellite CSV configuration.
 type SatelliteConfig struct {
-	Name          string
-	CSV           string
-	ApplicationID string
+	Name string
+	CSV  string
 }
 
 // Config holds all configuration for the export command.
@@ -27,12 +26,8 @@ type Config struct {
 	CSVAP1 string
 	CSVQA  string
 
-	AppIDUS1 string
-	AppIDEU1 string
-	AppIDAP1 string
-	AppIDQA  string
-
 	FusionAuthTenantID     string
+	FusionAuthAppID        string
 	OutputFile             string
 	ConflictOutputFile     string
 	ConflictPrecedence     string
@@ -43,10 +38,10 @@ type Config struct {
 // Satellites returns the list of configured satellites (those with a non-empty CSV path).
 func (c *Config) Satellites() []SatelliteConfig {
 	all := []SatelliteConfig{
-		{"us1", c.CSVUS1, c.AppIDUS1},
-		{"eu1", c.CSVEU1, c.AppIDEU1},
-		{"ap1", c.CSVAP1, c.AppIDAP1},
-		{"qa", c.CSVQA, c.AppIDQA},
+		{"us1", c.CSVUS1},
+		{"eu1", c.CSVEU1},
+		{"ap1", c.CSVAP1},
+		{"qa", c.CSVQA},
 	}
 	var result []SatelliteConfig
 	for _, s := range all {
@@ -82,17 +77,14 @@ func (c *Config) ExcludeEmailDomains() []string {
 // VerifyFlags validates the export configuration.
 func (c *Config) VerifyFlags() error {
 	var g errs.Group
-	sats := c.Satellites()
-	if len(sats) == 0 {
+	if len(c.Satellites()) == 0 {
 		g.Add(errs.New("at least one satellite must be configured (use --csv-NAME flags)"))
-	}
-	for _, sat := range sats {
-		if sat.ApplicationID == "" {
-			g.Add(errs.New("satellite %q: --app-id-%s is required when --csv-%s is set", sat.Name, sat.Name, sat.Name))
-		}
 	}
 	if c.FusionAuthTenantID == "" {
 		g.Add(errs.New("--fusionauth-tenant-id is required"))
+	}
+	if c.FusionAuthAppID == "" {
+		g.Add(errs.New("--app-id is required"))
 	}
 	return g.Err()
 }
@@ -132,11 +124,8 @@ func init() {
 	f.StringVar(&cfg.CSVEU1, "csv-eu1", "", "CSV file path for eu1 satellite")
 	f.StringVar(&cfg.CSVAP1, "csv-ap1", "", "CSV file path for ap1 satellite")
 	f.StringVar(&cfg.CSVQA, "csv-qa", "", "CSV file path for qa satellite")
-	f.StringVar(&cfg.AppIDUS1, "app-id-us1", "", "FusionAuth Application ID for us1")
-	f.StringVar(&cfg.AppIDEU1, "app-id-eu1", "", "FusionAuth Application ID for eu1")
-	f.StringVar(&cfg.AppIDAP1, "app-id-ap1", "", "FusionAuth Application ID for ap1")
-	f.StringVar(&cfg.AppIDQA, "app-id-qa", "", "FusionAuth Application ID for qa")
 	f.StringVar(&cfg.FusionAuthTenantID, "fusionauth-tenant-id", "", "FusionAuth tenant ID")
+	f.StringVar(&cfg.FusionAuthAppID, "app-id", "", "FusionAuth Application ID")
 	f.StringVar(&cfg.OutputFile, "output", "fusionauth-import.json", "Output file for FusionAuth import JSON")
 	f.StringVar(&cfg.ConflictOutputFile, "conflict-output", "conflict-users.json", "Output file listing conflict users")
 	f.StringVar(&cfg.ConflictPrecedence, "conflict-precedence", "us1,eu1,ap1", "Comma-separated satellite precedence for conflict users (highest first)")

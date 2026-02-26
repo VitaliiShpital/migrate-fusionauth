@@ -41,12 +41,7 @@ func Export(log *zap.Logger, cfg *Config) error {
 
 	idx := BuildIndex(bySatellite)
 
-	appIDs := make(map[string]string)
-	for _, sat := range cfg.Satellites() {
-		appIDs[sat.Name] = sat.ApplicationID
-	}
-
-	faUsers, conflictEntries, stats := buildAllFusionAuthUsers(log, idx, appIDs, cfg.Precedence(), cfg.FusionAuthTenantID, cfg.ExcludeEmailDomains())
+	faUsers, conflictEntries, stats := buildAllFusionAuthUsers(log, idx, cfg.FusionAuthAppID, cfg.Precedence(), cfg.FusionAuthTenantID, cfg.ExcludeEmailDomains())
 
 	log.Info("Export statistics",
 		zap.Int("total_unique_emails", stats.TotalUniqueEmails),
@@ -93,7 +88,7 @@ func Export(log *zap.Logger, cfg *Config) error {
 func buildAllFusionAuthUsers(
 	log *zap.Logger,
 	idx UserIndex,
-	appIDs map[string]string,
+	appID string,
 	precedence []string,
 	tenantID string,
 	excludeDomains []string,
@@ -124,7 +119,7 @@ func buildAllFusionAuthUsers(
 			continue
 		}
 
-		faUser, skip, reason := buildFusionAuthUser(log, primary, usersForEmail, isConflict, appIDs, tenantID)
+		faUser, skip, reason := buildFusionAuthUser(log, primary, usersForEmail, isConflict, appID, tenantID)
 		if skip {
 			switch reason {
 			case "no_hash":
@@ -140,7 +135,7 @@ func buildAllFusionAuthUsers(
 			conflictEntries = append(conflictEntries, ConflictUserEntry{
 				Email:         primary.Email,
 				Satellites:    distinctSatellites(usersForEmail),
-				ApplicationID: appIDs[primary.SatelliteName],
+				ApplicationID: appID,
 			})
 		} else {
 			stats.NoConflictUsers++
@@ -160,7 +155,7 @@ func buildFusionAuthUser(
 	primary RawUser,
 	allInstances []RawUser,
 	isConflict bool,
-	appIDs map[string]string,
+	appID string,
 	tenantID string,
 ) (FusionAuthUser, bool, string) {
 	if len(primary.PasswordHash) == 0 {
@@ -187,7 +182,6 @@ func buildFusionAuthUser(
 		},
 	}
 
-	appID := appIDs[primary.SatelliteName]
 	if !isConflict {
 		parsed, err := ParseBcryptHash(primary.PasswordHash)
 		if err != nil {
@@ -198,21 +192,13 @@ func buildFusionAuthUser(
 		faUser.Factor = parsed.Factor
 		faUser.Salt = parsed.Salt
 		faUser.Password = parsed.Hash
-		if appID != "" {
-			faUser.Registrations = []FusionAuthRegistration{
-				{ApplicationID: appID, Verified: verified},
-			}
-		}
 	} else {
 		faUser.Data["conflictSatellites"] = distinctSatellites(allInstances)
-		if appID != "" {
-			faUser.Registrations = []FusionAuthRegistration{
-				{ApplicationID: appID, Verified: verified},
-			}
-		} else {
-			log.Warn("No app ID configured for primary satellite, skipping registration",
-				zap.String("satellite", primary.SatelliteName),
-				zap.String("email", primary.Email))
+	}
+
+	if appID != "" {
+		faUser.Registrations = []FusionAuthRegistration{
+			{ApplicationID: appID, Verified: verified},
 		}
 	}
 

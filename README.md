@@ -43,10 +43,11 @@ Save each file, e.g. `us1.csv`, `eu1.csv`, `ap1.csv`.
 
 ```bash
 go run . export \
-  --csv-us1 us1.csv        --app-id-us1 <FA_APP_ID_US1> \
-  --csv-eu1 eu1.csv        --app-id-eu1 <FA_APP_ID_EU1> \
-  --csv-ap1 ap1.csv        --app-id-ap1 <FA_APP_ID_AP1> \
+  --csv-us1 us1.csv \
+  --csv-eu1 eu1.csv \
+  --csv-ap1 ap1.csv \
   --fusionauth-tenant-id <FA_TENANT_ID> \
+  --app-id <FA_APP_ID> \
   --exclude-email-domains storj.io \
   --output fusionauth-import.json \
   --conflict-output conflict-users.json
@@ -67,8 +68,8 @@ Both groups are written to `fusionauth-import.json`. A separate `conflict-users.
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--csv-{us1,eu1,ap1,qa}` | | Path to the Redash CSV for that satellite |
-| `--app-id-{us1,eu1,ap1,qa}` | | FusionAuth Application ID for that satellite |
 | `--fusionauth-tenant-id` | | FusionAuth tenant ID |
+| `--app-id` | | FusionAuth Application ID (shared across all satellites) |
 | `--conflict-precedence` | `us1,eu1,ap1` | Satellite priority for conflict users (highest first) |
 | `--exclude-email-domains` | | Comma-separated domains to skip (e.g. `storj.io`) |
 | `--output` | `fusionauth-import.json` | Output file for the FusionAuth import payload |
