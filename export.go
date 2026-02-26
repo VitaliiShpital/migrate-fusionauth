@@ -16,14 +16,14 @@ import (
 
 // ExportStats tracks export statistics.
 type ExportStats struct {
-	TotalUniqueEmails int
-	NoConflictUsers   int
-	ConflictUsers     int
-	SkippedSSO        int
-	SkippedNoHash     int
-	SkippedParseErr   int
-	SkippedDomain     int
-	UsersWithMFA      int
+	TotalUniqueEmails  int
+	NoConflictUsers    int
+	ConflictUsers      int
+	WithPreviousExtID  int
+	SkippedNoHash      int
+	SkippedParseErr    int
+	SkippedDomain      int
+	UsersWithMFA       int
 }
 
 // Export reads CSV files for each satellite, detects conflicts, and writes
@@ -48,7 +48,7 @@ func Export(log *zap.Logger, cfg *Config) error {
 		zap.Int("no_conflict_users", stats.NoConflictUsers),
 		zap.Int("conflict_users", stats.ConflictUsers),
 		zap.Int("users_with_mfa", stats.UsersWithMFA),
-		zap.Int("skipped_sso", stats.SkippedSSO),
+		zap.Int("with_previous_external_id", stats.WithPreviousExtID),
 		zap.Int("skipped_no_hash", stats.SkippedNoHash),
 		zap.Int("skipped_parse_error", stats.SkippedParseErr),
 		zap.Int("skipped_domain", stats.SkippedDomain))
@@ -112,13 +112,6 @@ func buildAllFusionAuthUsers(
 			continue
 		}
 
-		// Skip SSO users on the non-conflict path (they have no satellite password).
-		if !isConflict && primary.ExternalID != "" {
-			stats.SkippedSSO++
-			log.Debug("Skipping SSO user", zap.String("email", primary.Email))
-			continue
-		}
-
 		faUser, skip, reason := buildFusionAuthUser(log, primary, usersForEmail, isConflict, appID, tenantID)
 		if skip {
 			switch reason {
@@ -140,6 +133,12 @@ func buildAllFusionAuthUsers(
 		} else {
 			stats.NoConflictUsers++
 		}
+		for _, u := range usersForEmail {
+			if u.ExternalID != "" {
+				stats.WithPreviousExtID++
+				break
+			}
+		}
 		if faUser.TwoFactor != nil {
 			stats.UsersWithMFA++
 		}
@@ -158,12 +157,30 @@ func buildFusionAuthUser(
 	appID string,
 	tenantID string,
 ) (FusionAuthUser, bool, string) {
-	if len(primary.PasswordHash) == 0 {
+	if len(primary.PasswordHash) == 0 && primary.ExternalID == "" {
 		log.Debug("No password hash, skipping", zap.String("email", primary.Email))
 		return FusionAuthUser{}, true, "no_hash"
 	}
 
 	verified := primary.Status == 1
+	data := map[string]interface{}{
+		"storjUserId":     primary.ID.String(),
+		"storjStatus":     primary.Status,
+		"sourceSatellite": primary.SatelliteName,
+		"isConflictUser":  isConflict,
+		"mfaEnabled":      primary.MFAEnabled,
+		"migratedFrom":    "storj-satellite",
+		"migratedAt":      time.Now().UTC().Format(time.RFC3339),
+	}
+	prevExtIDs := make(map[string]string)
+	for _, u := range allInstances {
+		if u.ExternalID != "" {
+			prevExtIDs[u.SatelliteName] = u.ExternalID
+		}
+	}
+	if len(prevExtIDs) > 0 {
+		data["previousExternalIds"] = prevExtIDs
+	}
 	faUser := FusionAuthUser{
 		Active:        true,
 		Email:         primary.Email,
@@ -171,18 +188,10 @@ func buildFusionAuthUser(
 		InsertInstant: primary.CreatedAt.UnixMilli(),
 		TenantID:      tenantID,
 		Verified:      verified,
-		Data: map[string]interface{}{
-			"storjUserId":    primary.ID.String(),
-			"storjStatus":    primary.Status,
-			"sourceSatellite": primary.SatelliteName,
-			"isConflictUser": isConflict,
-			"mfaEnabled":     primary.MFAEnabled,
-			"migratedFrom":   "storj-satellite",
-			"migratedAt":     time.Now().UTC().Format(time.RFC3339),
-		},
+		Data:          data,
 	}
 
-	if !isConflict {
+	if len(primary.PasswordHash) > 0 && !isConflict {
 		parsed, err := ParseBcryptHash(primary.PasswordHash)
 		if err != nil {
 			log.Debug("Failed to parse bcrypt hash, skipping", zap.String("email", primary.Email), zap.Error(err))
@@ -192,7 +201,9 @@ func buildFusionAuthUser(
 		faUser.Factor = parsed.Factor
 		faUser.Salt = parsed.Salt
 		faUser.Password = parsed.Hash
-	} else {
+	}
+
+	if isConflict {
 		faUser.Data["conflictSatellites"] = distinctSatellites(allInstances)
 	}
 

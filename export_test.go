@@ -179,11 +179,22 @@ func TestBuildFusionAuthUsers(t *testing.T) {
 		require.ElementsMatch(t, []string{"us1", "eu1"}, conflictSats)
 	})
 
-	t.Run("skip user without password hash", func(t *testing.T) {
+	t.Run("skip user without password hash and no external id", func(t *testing.T) {
 		primary := RawUser{ID: testrand.UUID(), Email: "nohash@example.com", Status: 1, SatelliteName: "us1"}
 		_, skip, reason := buildFusionAuthUser(log, primary, []RawUser{primary}, false, appID, tenantID)
 		require.True(t, skip)
 		require.Equal(t, "no_hash", reason)
+	})
+
+	t.Run("SSO user without password hash is exported", func(t *testing.T) {
+		primary := RawUser{ID: testrand.UUID(), Email: "sso@example.com", ExternalID: "entra:some-oid", Status: 1, SatelliteName: "us1"}
+		faUser, skip, _ := buildFusionAuthUser(log, primary, []RawUser{primary}, false, appID, tenantID)
+		require.False(t, skip)
+		require.Empty(t, faUser.Password)
+		require.Empty(t, faUser.EncryptionScheme)
+		prevIDs, ok := faUser.Data["previousExternalIds"].(map[string]string)
+		require.True(t, ok)
+		require.Equal(t, "entra:some-oid", prevIDs["us1"])
 	})
 
 	t.Run("MFA exported with TOTP secret and recovery codes", func(t *testing.T) {
@@ -200,17 +211,26 @@ func TestBuildFusionAuthUsers(t *testing.T) {
 		require.Equal(t, []string{"code1", "code2"}, faUser.TwoFactor.RecoveryCodes)
 	})
 
-	t.Run("SSO user skipped", func(t *testing.T) {
+	t.Run("SSO user exported with previousExternalIds in metadata", func(t *testing.T) {
 		idx := BuildIndex(map[string][]RawUser{
 			"us1": {{
-				ID: testrand.UUID(), ExternalID: "enterprise-entra:some-oid",
+				ID: testrand.UUID(), ExternalID: "entra:oid-us1",
 				Email: "sso@enterprise.com", NormalizedEmail: "SSO@ENTERPRISE.COM",
 				PasswordHash: hash, Status: 1, SatelliteName: "us1",
 			}},
+			"eu1": {{
+				ID: testrand.UUID(), ExternalID: "entra:oid-eu1",
+				Email: "sso@enterprise.com", NormalizedEmail: "SSO@ENTERPRISE.COM",
+				PasswordHash: hash, Status: 1, SatelliteName: "eu1",
+			}},
 		})
 		faUsers, _, stats := buildAllFusionAuthUsers(log, idx, appID, precedence, tenantID, nil)
-		require.Empty(t, faUsers)
-		require.Equal(t, 1, stats.SkippedSSO)
+		require.Len(t, faUsers, 1)
+		prevIDs, ok := faUsers[0].Data["previousExternalIds"].(map[string]string)
+		require.True(t, ok)
+		require.Equal(t, "entra:oid-us1", prevIDs["us1"])
+		require.Equal(t, "entra:oid-eu1", prevIDs["eu1"])
+		require.Equal(t, 1, stats.WithPreviousExtID)
 	})
 
 	t.Run("excluded domain skipped", func(t *testing.T) {

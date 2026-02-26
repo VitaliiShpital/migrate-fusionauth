@@ -150,3 +150,4 @@ Use `--dry-run` to print match/missing statistics without writing any files.
 | `created_at` | `insertInstant` | Unix milliseconds |
 | `mfa_secret_key` + `mfa_recovery_codes` | `twoFactor` | TOTP secret converted from base32 to base64 |
 | `satellite name` | `data.sourceSatellite`, `registrations[].applicationId` | |
+| `external_id` | `data.previousExternalIds` | Map of `{ "us1": "<old-id>", ... }` for all satellites where the user had a non-empty `external_id`; omitted if none. Preserved for rollback purposes. |
