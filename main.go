@@ -148,6 +148,7 @@ func init() {
 	bf.StringVar(&backfillCfg.CSVAP1, "csv-ap1", "", "CSV file path for ap1 satellite")
 	bf.StringVar(&backfillCfg.CSVQA, "csv-qa", "", "CSV file path for qa satellite")
 	bf.StringVar(&backfillCfg.OutputDir, "output-dir", "", "Directory for generated SQL files (default: current dir)")
+	bf.StringVar(&backfillCfg.ExcludeEmailDomainList, "exclude-email-domains", "", "Comma-separated email domains to skip (same as used in export)")
 	bf.BoolVar(&backfillCfg.DryRun, "dry-run", false, "Print match statistics without writing SQL files")
 	rootCmd.AddCommand(backfillCmd)
 }

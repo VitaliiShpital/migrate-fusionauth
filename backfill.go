@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -19,16 +20,28 @@ import (
 
 // BackfillConfig holds configuration for the backfill-external-ids command.
 type BackfillConfig struct {
-	FusionAuthURL string
-	APIKey        string
-	OutputDir     string
-	DryRun        bool
+	FusionAuthURL          string
+	APIKey                 string
+	OutputDir              string
+	ExcludeEmailDomainList string
+	DryRun                 bool
 
 	// CSV inputs — reuse the same per-satellite flags as the export command.
 	CSVUS1 string
 	CSVEU1 string
 	CSVAP1 string
 	CSVQA  string
+}
+
+// ExcludeEmailDomains returns the parsed list of excluded email domains.
+func (c *BackfillConfig) ExcludeEmailDomains() []string {
+	var result []string
+	for _, d := range strings.Split(c.ExcludeEmailDomainList, ",") {
+		if d = strings.TrimSpace(d); d != "" {
+			result = append(result, d)
+		}
+	}
+	return result
 }
 
 // VerifyFlags validates the configuration.
@@ -69,8 +82,9 @@ type faUserSearchRequest struct {
 }
 
 type faUserSearchParams struct {
-	NumberOfResults int `json:"numberOfResults"`
-	StartRow        int `json:"startRow"`
+	QueryString     string `json:"queryString"`
+	NumberOfResults int    `json:"numberOfResults"`
+	StartRow        int    `json:"startRow"`
 }
 
 // faUserSearchResponse is the FA user search response body.
@@ -101,6 +115,7 @@ func BackfillExternalIDs(ctx context.Context, log *zap.Logger, cfg *BackfillConf
 		}
 	}
 
+	excludeDomains := cfg.ExcludeEmailDomains()
 	for _, sat := range cfg.satellites() {
 		users, err := ReadCSV(sat.csv, sat.name)
 		if err != nil {
@@ -110,9 +125,12 @@ func BackfillExternalIDs(ctx context.Context, log *zap.Logger, cfg *BackfillConf
 		var matched, missing int
 		var statements []string
 		for _, u := range users {
+			if isExcludedDomain(u.Email, excludeDomains) {
+				continue
+			}
 			faID, ok := emailToFAID[strings.ToUpper(u.Email)]
 			if !ok {
-				log.Warn("User not found in FusionAuth", zap.String("email", u.Email), zap.String("satellite", sat.name))
+				log.Debug("User not found in FusionAuth", zap.String("email", u.Email), zap.String("satellite", sat.name))
 				missing++
 				continue
 			}
@@ -153,6 +171,7 @@ func fetchAllFAUsers(ctx context.Context, baseURL, apiKey string) (map[string]st
 	for startRow := 0; ; startRow += faSearchPageSize {
 		body, err := json.Marshal(faUserSearchRequest{
 			Search: faUserSearchParams{
+				QueryString:     "*",
 				NumberOfResults: faSearchPageSize,
 				StartRow:        startRow,
 			},
@@ -177,7 +196,8 @@ func fetchAllFAUsers(ctx context.Context, baseURL, apiKey string) (map[string]st
 		err = func() (err error) {
 			defer func() { err = errs.Combine(err, resp.Body.Close()) }()
 			if resp.StatusCode != http.StatusOK {
-				return errs.New("unexpected status %d from FA search", resp.StatusCode)
+				body, _ := io.ReadAll(resp.Body)
+				return errs.New("unexpected status %d from FA search: %s", resp.StatusCode, body)
 			}
 			return json.NewDecoder(resp.Body).Decode(&result)
 		}()

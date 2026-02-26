@@ -8,6 +8,9 @@
 *.so
 *.dylib
 fusionauth-migration
+conflict-users.json
+fusionauth-import.json
+sql/
 
 # Test binary, built with `go test -c`
 *.test
