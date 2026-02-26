@@ -97,6 +97,47 @@ go run . send-password-resets \
 
 This calls FusionAuth's `/api/user/forgot-password` for each conflict user, triggering a password-reset email. Use `--dry-run` to preview what would be sent without making any HTTP requests.
 
+## Step 5 — Backfill external_id in satellite DBs
+
+After import, each FusionAuth user has a new FA UUID. This command queries the FA API, matches users to the original CSVs by email, and generates per-satellite SQL files with `UPDATE` statements to write those FA UUIDs back into the satellite's `external_id` column.
+
+```bash
+go run . backfill-external-ids \
+  --fusionauth-url https://<FA_HOST> \
+  --api-key <FA_API_KEY> \
+  --csv-us1 us1.csv \
+  --csv-eu1 eu1.csv \
+  --csv-ap1 ap1.csv \
+  --output-dir ./sql
+```
+
+This writes one file per satellite (e.g. `sql/us1-backfill-external-ids.sql`):
+
+```sql
+-- Satellite: us1
+-- Generated: 2026-02-26T13:00:00Z
+-- 12345 statements
+
+UPDATE users SET external_id = 'fa-uuid-...' WHERE normalized_email = 'ALICE@EXAMPLE.COM';
+...
+```
+
+Hand the appropriate file to DevOps to run against each satellite's Spanner instance via `spanner-cli` or `gcloud spanner databases execute-sql`.
+
+Use `--dry-run` to print match/missing statistics without writing any files.
+
+> **Note:** `external_id` is also auto-populated on each user's first login — the satellite maps the FA `sub` claim to the local user by email. The backfill is only needed if you require `external_id` to be set before users log in.
+
+### Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--fusionauth-url` | | FusionAuth base URL |
+| `--api-key` | | FusionAuth API key |
+| `--csv-{us1,eu1,ap1,qa}` | | Same CSVs used in the export step |
+| `--output-dir` | `.` | Directory for generated `.sql` files |
+| `--dry-run` | `false` | Print stats without writing files |
+
 ## User data mapping
 
 | Satellite field | FusionAuth field | Notes |

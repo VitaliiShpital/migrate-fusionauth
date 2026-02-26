@@ -115,8 +115,15 @@ var (
 		RunE:  runSendPasswordResets,
 	}
 
+	backfillCmd = &cobra.Command{
+		Use:   "backfill-external-ids",
+		Short: "Generate SQL to populate external_id in satellite DBs from FusionAuth user IDs",
+		RunE:  runBackfill,
+	}
+
 	cfg                   Config
 	sendPasswordResetsCfg SendPasswordResetsConfig
+	backfillCfg           BackfillConfig
 )
 
 func init() {
@@ -143,6 +150,17 @@ func init() {
 	sf.StringVar(&sendPasswordResetsCfg.ConflictFile, "conflict-file", "conflict-users.json", "Path to conflict-users.json from the export step")
 	sf.BoolVar(&sendPasswordResetsCfg.DryRun, "dry-run", false, "Print what would be sent without making HTTP requests")
 	rootCmd.AddCommand(sendPasswordResetsCmd)
+
+	bf := backfillCmd.Flags()
+	bf.StringVar(&backfillCfg.FusionAuthURL, "fusionauth-url", "", "FusionAuth base URL (e.g. https://auth.example.com)")
+	bf.StringVar(&backfillCfg.APIKey, "api-key", "", "FusionAuth API key")
+	bf.StringVar(&backfillCfg.CSVUS1, "csv-us1", "", "CSV file path for us1 satellite")
+	bf.StringVar(&backfillCfg.CSVEU1, "csv-eu1", "", "CSV file path for eu1 satellite")
+	bf.StringVar(&backfillCfg.CSVAP1, "csv-ap1", "", "CSV file path for ap1 satellite")
+	bf.StringVar(&backfillCfg.CSVQA, "csv-qa", "", "CSV file path for qa satellite")
+	bf.StringVar(&backfillCfg.OutputDir, "output-dir", "", "Directory for generated SQL files (default: current dir)")
+	bf.BoolVar(&backfillCfg.DryRun, "dry-run", false, "Print match statistics without writing SQL files")
+	rootCmd.AddCommand(backfillCmd)
 }
 
 func runExport(cmd *cobra.Command, _ []string) error {
@@ -160,6 +178,15 @@ func runSendPasswordResets(cmd *cobra.Command, _ []string) error {
 	ctx, _ := process.Ctx(cmd)
 	log := zap.L()
 	return SendPasswordResets(ctx, log, &sendPasswordResetsCfg)
+}
+
+func runBackfill(cmd *cobra.Command, _ []string) error {
+	if err := backfillCfg.VerifyFlags(); err != nil {
+		return err
+	}
+	ctx, _ := process.Ctx(cmd)
+	log := zap.L()
+	return BackfillExternalIDs(ctx, log, &backfillCfg)
 }
 
 func main() {
