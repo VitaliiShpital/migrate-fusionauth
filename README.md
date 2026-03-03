@@ -35,7 +35,7 @@ WHERE status = 1
 ```
 
 > `tenant_id IS NULL` limits the export to Storj-native accounts (excludes partner/whitelabel tenants).
-> SSO users (those with a non-empty `external_id`) are automatically skipped during export.
+> SSO users (those with a non-empty `external_id`) are included in the export without a password; their old `external_id` values are preserved in `data.previousExternalIds` for rollback.
 
 Save each file, e.g. `us1.csv`, `eu1.csv`, `ap1.csv`.
 
@@ -78,14 +78,24 @@ Both groups are written to `fusionauth-import.json`. A separate `conflict-users.
 
 ## Step 3 — Import into FusionAuth
 
-Use the FusionAuth bulk import API:
-
 ```bash
-curl -s -X POST https://<FA_HOST>/api/user/import \
-  -H "Authorization: <FA_API_KEY>" \
-  -H "Content-Type: application/json" \
-  -d @fusionauth-import.json
+go run . import \
+  --fusionauth-url https://<FA_HOST> \
+  --fusionauth-tenant-id <FA_TENANT_ID> \
+  --api-key <FA_API_KEY> \
+  --input fusionauth-import.json
 ```
+
+The tool splits the file into batches (default 1000 users each) and sends them sequentially, logging progress after each batch. Use `--batch-size` to tune if needed. Use `--dry-run` to print the batch plan without sending any requests.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--fusionauth-url` | | FusionAuth base URL |
+| `--fusionauth-tenant-id` | | FusionAuth tenant ID |
+| `--api-key` | | FusionAuth API key |
+| `--input` | `fusionauth-import.json` | Import file from Step 2 |
+| `--batch-size` | `1000` | Users per request |
+| `--dry-run` | `false` | Print batch plan without sending requests |
 
 ## Step 4 — Send password resets to conflict users
 

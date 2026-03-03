@@ -113,9 +113,16 @@ var (
 		RunE:  runBackfill,
 	}
 
+	importCmd = &cobra.Command{
+		Use:   "import",
+		Short: "Import users from the export JSON into FusionAuth in batches",
+		RunE:  runImport,
+	}
+
 	cfg                   Config
 	sendPasswordResetsCfg SendPasswordResetsConfig
 	backfillCfg           BackfillConfig
+	importCfg             ImportConfig
 )
 
 func init() {
@@ -151,6 +158,15 @@ func init() {
 	bf.StringVar(&backfillCfg.ExcludeEmailDomainList, "exclude-email-domains", "", "Comma-separated email domains to skip (same as used in export)")
 	bf.BoolVar(&backfillCfg.DryRun, "dry-run", false, "Print match statistics without writing SQL files")
 	rootCmd.AddCommand(backfillCmd)
+
+	imf := importCmd.Flags()
+	imf.StringVar(&importCfg.FusionAuthURL, "fusionauth-url", "", "FusionAuth base URL (e.g. https://auth.example.com)")
+	imf.StringVar(&importCfg.TenantID, "fusionauth-tenant-id", "", "FusionAuth tenant ID")
+	imf.StringVar(&importCfg.APIKey, "api-key", "", "FusionAuth API key")
+	imf.StringVar(&importCfg.InputFile, "input", "fusionauth-import.json", "Import JSON file produced by the export command")
+	imf.IntVar(&importCfg.BatchSize, "batch-size", 1000, "Number of users per import request")
+	imf.BoolVar(&importCfg.DryRun, "dry-run", false, "Print batch plan without sending any requests")
+	rootCmd.AddCommand(importCmd)
 }
 
 func runExport(cmd *cobra.Command, _ []string) error {
@@ -177,6 +193,15 @@ func runBackfill(cmd *cobra.Command, _ []string) error {
 	ctx, _ := process.Ctx(cmd)
 	log := zap.L()
 	return BackfillExternalIDs(ctx, log, &backfillCfg)
+}
+
+func runImport(cmd *cobra.Command, _ []string) error {
+	if err := importCfg.VerifyFlags(); err != nil {
+		return err
+	}
+	ctx, _ := process.Ctx(cmd)
+	log := zap.L()
+	return Import(ctx, log, &importCfg)
 }
 
 func main() {
