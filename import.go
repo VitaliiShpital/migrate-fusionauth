@@ -84,10 +84,6 @@ func Import(ctx context.Context, log *zap.Logger, cfg *ImportConfig) error {
 		}
 		batch := importData.Users[start:end]
 
-		if err := ctx.Err(); err != nil {
-			return errs.New("context cancelled: %w", err)
-		}
-
 		if err := sendImportBatch(ctx, client, url, cfg.TenantID, cfg.APIKey, batch); err != nil {
 			return errs.New("batch %d (users %d-%d) failed: %w", batchNum, start+1, end, err)
 		}
