@@ -70,7 +70,7 @@ Both groups are written to `fusionauth-import.json`. A separate `conflict-users.
 | `--csv-{us1,eu1,ap1,qa}` | | Path to the Redash CSV for that satellite |
 | `--fusionauth-tenant-id` | | FusionAuth tenant ID |
 | `--app-id` | | FusionAuth Application ID (shared across all satellites) |
-| `--conflict-precedence` | `us1,eu1,ap1` | Satellite priority for conflict users (highest first) |
+| `--conflict-precedence` | `us1,eu1,ap1,slc` | Satellite priority for conflict users (highest first) |
 | `--exclude-email-domains` | | Comma-separated domains to skip (e.g. `storj.io`) |
 | `--output` | `fusionauth-import.json` | Output file for the FusionAuth import payload |
 | `--conflict-output` | `conflict-users.json` | Output file listing conflict users |

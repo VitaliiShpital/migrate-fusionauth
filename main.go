@@ -25,6 +25,7 @@ type Config struct {
 	CSVEU1 string
 	CSVAP1 string
 	CSVQA  string
+	CSVSLC string
 
 	FusionAuthTenantID     string
 	FusionAuthAppID        string
@@ -42,6 +43,7 @@ func (c *Config) Satellites() []SatelliteConfig {
 		{"eu1", c.CSVEU1},
 		{"ap1", c.CSVAP1},
 		{"qa", c.CSVQA},
+		{"slc", c.CSVSLC},
 	}
 	var result []SatelliteConfig
 	for _, s := range all {
@@ -131,11 +133,12 @@ func init() {
 	f.StringVar(&cfg.CSVEU1, "csv-eu1", "", "CSV file path for eu1 satellite")
 	f.StringVar(&cfg.CSVAP1, "csv-ap1", "", "CSV file path for ap1 satellite")
 	f.StringVar(&cfg.CSVQA, "csv-qa", "", "CSV file path for qa satellite")
+	f.StringVar(&cfg.CSVSLC, "csv-slc", "", "CSV file path for slc satellite")
 	f.StringVar(&cfg.FusionAuthTenantID, "fusionauth-tenant-id", "", "FusionAuth tenant ID")
 	f.StringVar(&cfg.FusionAuthAppID, "app-id", "", "FusionAuth Application ID")
 	f.StringVar(&cfg.OutputFile, "output", "fusionauth-import.json", "Output file for FusionAuth import JSON")
 	f.StringVar(&cfg.ConflictOutputFile, "conflict-output", "conflict-users.json", "Output file listing conflict users")
-	f.StringVar(&cfg.ConflictPrecedence, "conflict-precedence", "us1,eu1,ap1", "Comma-separated satellite precedence for conflict users (highest first)")
+	f.StringVar(&cfg.ConflictPrecedence, "conflict-precedence", "us1,eu1,ap1,slc", "Comma-separated satellite precedence for conflict users (highest first)")
 	f.StringVar(&cfg.ExcludeEmailDomainList, "exclude-email-domains", "", "Comma-separated email domains to skip (e.g. storj.io)")
 	f.BoolVar(&cfg.DryRun, "dry-run", false, "Print statistics without writing files")
 	rootCmd.AddCommand(exportCmd)
@@ -154,6 +157,7 @@ func init() {
 	bf.StringVar(&backfillCfg.CSVEU1, "csv-eu1", "", "CSV file path for eu1 satellite")
 	bf.StringVar(&backfillCfg.CSVAP1, "csv-ap1", "", "CSV file path for ap1 satellite")
 	bf.StringVar(&backfillCfg.CSVQA, "csv-qa", "", "CSV file path for qa satellite")
+	bf.StringVar(&backfillCfg.CSVSLC, "csv-slc", "", "CSV file path for slc satellite")
 	bf.StringVar(&backfillCfg.OutputDir, "output-dir", "", "Directory for generated SQL files (default: current dir)")
 	bf.StringVar(&backfillCfg.ExcludeEmailDomainList, "exclude-email-domains", "", "Comma-separated email domains to skip (same as used in export)")
 	bf.BoolVar(&backfillCfg.DryRun, "dry-run", false, "Print match statistics without writing SQL files")

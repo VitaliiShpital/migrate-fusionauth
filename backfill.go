@@ -31,6 +31,7 @@ type BackfillConfig struct {
 	CSVEU1 string
 	CSVAP1 string
 	CSVQA  string
+	CSVSLC string
 }
 
 // ExcludeEmailDomains returns the parsed list of excluded email domains.
@@ -53,7 +54,7 @@ func (c *BackfillConfig) VerifyFlags() error {
 	if c.APIKey == "" {
 		g.Add(errs.New("--api-key is required"))
 	}
-	if c.CSVUS1 == "" && c.CSVEU1 == "" && c.CSVAP1 == "" && c.CSVQA == "" {
+	if c.CSVUS1 == "" && c.CSVEU1 == "" && c.CSVAP1 == "" && c.CSVQA == "" && c.CSVSLC == "" {
 		g.Add(errs.New("at least one --csv-{name} flag is required"))
 	}
 	return g.Err()
@@ -66,6 +67,7 @@ func (c *BackfillConfig) satellites() []struct{ name, csv string } {
 		{"eu1", c.CSVEU1},
 		{"ap1", c.CSVAP1},
 		{"qa", c.CSVQA},
+		{"slc", c.CSVSLC},
 	}
 	var result []struct{ name, csv string }
 	for _, s := range all {
