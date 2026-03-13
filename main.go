@@ -29,10 +29,12 @@ type Config struct {
 
 	FusionAuthTenantID     string
 	FusionAuthAppID        string
+	IdentityProviderID     string
 	OutputFile             string
 	ConflictOutputFile     string
 	ConflictPrecedence     string
 	ExcludeEmailDomainList string
+	RawCSV                 bool
 	DryRun                 bool
 }
 
@@ -139,12 +141,15 @@ func init() {
 	f.StringVar(&cfg.OutputFile, "output", "fusionauth-import.json", "Output file for FusionAuth import JSON")
 	f.StringVar(&cfg.ConflictOutputFile, "conflict-output", "conflict-users.json", "Output file listing conflict users")
 	f.StringVar(&cfg.ConflictPrecedence, "conflict-precedence", "us1,eu1,ap1,slc", "Comma-separated satellite precedence for conflict users (highest first)")
+	f.StringVar(&cfg.IdentityProviderID, "identity-provider-id", "", "FusionAuth identity provider ID to embed in Link for users with an external_id (optional)")
 	f.StringVar(&cfg.ExcludeEmailDomainList, "exclude-email-domains", "", "Comma-separated email domains to skip (e.g. storj.io)")
+	f.BoolVar(&cfg.RawCSV, "raw-csv", false, "Parse CSVs as direct satellite exports (plain string IDs, raw timestamp) instead of Redash format")
 	f.BoolVar(&cfg.DryRun, "dry-run", false, "Print statistics without writing files")
 	rootCmd.AddCommand(exportCmd)
 
 	sf := sendPasswordResetsCmd.Flags()
 	sf.StringVar(&sendPasswordResetsCfg.FusionAuthURL, "fusionauth-url", "", "FusionAuth base URL (e.g. https://auth.example.com)")
+	sf.StringVar(&sendPasswordResetsCfg.TenantID, "fusionauth-tenant-id", "", "FusionAuth tenant ID")
 	sf.StringVar(&sendPasswordResetsCfg.APIKey, "api-key", "", "FusionAuth API key")
 	sf.StringVar(&sendPasswordResetsCfg.ConflictFile, "conflict-file", "conflict-users.json", "Path to conflict-users.json from the export step")
 	sf.BoolVar(&sendPasswordResetsCfg.DryRun, "dry-run", false, "Print what would be sent without making HTTP requests")
@@ -152,6 +157,7 @@ func init() {
 
 	bf := backfillCmd.Flags()
 	bf.StringVar(&backfillCfg.FusionAuthURL, "fusionauth-url", "", "FusionAuth base URL (e.g. https://auth.example.com)")
+	bf.StringVar(&backfillCfg.TenantID, "fusionauth-tenant-id", "", "FusionAuth tenant ID (scopes the user search to a single tenant)")
 	bf.StringVar(&backfillCfg.APIKey, "api-key", "", "FusionAuth API key")
 	bf.StringVar(&backfillCfg.CSVUS1, "csv-us1", "", "CSV file path for us1 satellite")
 	bf.StringVar(&backfillCfg.CSVEU1, "csv-eu1", "", "CSV file path for eu1 satellite")
@@ -160,6 +166,7 @@ func init() {
 	bf.StringVar(&backfillCfg.CSVSLC, "csv-slc", "", "CSV file path for slc satellite")
 	bf.StringVar(&backfillCfg.OutputDir, "output-dir", "", "Directory for generated SQL files (default: current dir)")
 	bf.StringVar(&backfillCfg.ExcludeEmailDomainList, "exclude-email-domains", "", "Comma-separated email domains to skip (same as used in export)")
+	bf.BoolVar(&backfillCfg.RawCSV, "raw-csv", false, "Parse CSVs as direct satellite exports (plain string IDs, raw timestamp) instead of Redash format")
 	bf.BoolVar(&backfillCfg.DryRun, "dry-run", false, "Print match statistics without writing SQL files")
 	rootCmd.AddCommand(backfillCmd)
 

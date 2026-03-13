@@ -16,14 +16,15 @@ import (
 
 // ExportStats tracks export statistics.
 type ExportStats struct {
-	TotalUniqueEmails  int
-	NoConflictUsers    int
-	ConflictUsers      int
-	WithPreviousExtID  int
-	SkippedNoHash      int
-	SkippedParseErr    int
-	SkippedDomain      int
-	UsersWithMFA       int
+	TotalUniqueEmails int
+	NoConflictUsers   int
+	ConflictUsers     int
+	WithPreviousExtID int
+	WithIdentityLink  int
+	SkippedNoHash     int
+	SkippedParseErr   int
+	SkippedDomain     int
+	UsersWithMFA      int
 }
 
 // Export reads CSV files for each satellite, detects conflicts, and writes
@@ -31,7 +32,7 @@ type ExportStats struct {
 func Export(log *zap.Logger, cfg *Config) error {
 	bySatellite := make(map[string][]RawUser)
 	for _, sat := range cfg.Satellites() {
-		users, err := ReadCSV(sat.CSV, sat.Name)
+		users, err := ReadCSV(sat.CSV, sat.Name, !cfg.RawCSV)
 		if err != nil {
 			return errs.New("failed to read CSV for satellite %s: %w", sat.Name, err)
 		}
@@ -41,7 +42,7 @@ func Export(log *zap.Logger, cfg *Config) error {
 
 	idx := BuildIndex(bySatellite)
 
-	faUsers, conflictEntries, stats := buildAllFusionAuthUsers(log, idx, cfg.FusionAuthAppID, cfg.Precedence(), cfg.FusionAuthTenantID, cfg.ExcludeEmailDomains())
+	faUsers, conflictEntries, stats := buildAllFusionAuthUsers(log, idx, cfg.FusionAuthAppID, cfg.Precedence(), cfg.FusionAuthTenantID, cfg.ExcludeEmailDomains(), cfg.IdentityProviderID)
 
 	log.Info("Export statistics",
 		zap.Int("total_unique_emails", stats.TotalUniqueEmails),
@@ -49,6 +50,7 @@ func Export(log *zap.Logger, cfg *Config) error {
 		zap.Int("conflict_users", stats.ConflictUsers),
 		zap.Int("users_with_mfa", stats.UsersWithMFA),
 		zap.Int("with_previous_external_id", stats.WithPreviousExtID),
+		zap.Int("with_identity_link", stats.WithIdentityLink),
 		zap.Int("skipped_no_hash", stats.SkippedNoHash),
 		zap.Int("skipped_parse_error", stats.SkippedParseErr),
 		zap.Int("skipped_domain", stats.SkippedDomain))
@@ -92,6 +94,7 @@ func buildAllFusionAuthUsers(
 	precedence []string,
 	tenantID string,
 	excludeDomains []string,
+	identityProviderID string,
 ) (faUsers []FusionAuthUser, conflictEntries []ConflictUserEntry, stats ExportStats) {
 	emails := make([]string, 0, len(idx.ByNormalizedEmail))
 	for email := range idx.ByNormalizedEmail {
@@ -112,7 +115,7 @@ func buildAllFusionAuthUsers(
 			continue
 		}
 
-		faUser, skip, reason := buildFusionAuthUser(log, primary, usersForEmail, isConflict, appID, tenantID)
+		faUser, skip, reason := buildFusionAuthUser(log, primary, usersForEmail, isConflict, appID, tenantID, identityProviderID)
 		if skip {
 			switch reason {
 			case "no_hash":
@@ -139,6 +142,9 @@ func buildAllFusionAuthUsers(
 				break
 			}
 		}
+		if faUser.Link != nil {
+			stats.WithIdentityLink++
+		}
 		if faUser.TwoFactor != nil {
 			stats.UsersWithMFA++
 		}
@@ -156,6 +162,7 @@ func buildFusionAuthUser(
 	isConflict bool,
 	appID string,
 	tenantID string,
+	identityProviderID string,
 ) (FusionAuthUser, bool, string) {
 	if len(primary.PasswordHash) == 0 && primary.ExternalID == "" {
 		log.Debug("No password hash, skipping", zap.String("email", primary.Email))
@@ -181,11 +188,15 @@ func buildFusionAuthUser(
 	if len(prevExtIDs) > 0 {
 		data["previousExternalIds"] = prevExtIDs
 	}
+	var insertInstant int64
+	if !primary.CreatedAt.IsZero() {
+		insertInstant = primary.CreatedAt.UnixMilli()
+	}
 	faUser := FusionAuthUser{
 		Active:        true,
 		Email:         primary.Email,
 		FullName:      primary.FullName,
-		InsertInstant: primary.CreatedAt.UnixMilli(),
+		InsertInstant: insertInstant,
 		TenantID:      tenantID,
 		Verified:      verified,
 		Data:          data,
@@ -235,7 +246,29 @@ func buildFusionAuthUser(
 		}
 	}
 
+	if identityProviderID != "" && primary.ExternalID != "" {
+		if idpUserID := parseExternalID(primary.ExternalID); idpUserID != "" {
+			faUser.Link = &FusionAuthIdentityProviderLink{
+				IdentityProviderID:     identityProviderID,
+				IdentityProviderUserID: idpUserID,
+				DisplayName:            primary.Email,
+			}
+		} else {
+			log.Warn("Could not parse external_id for identity link, skipping link", zap.String("email", primary.Email), zap.String("external_id", primary.ExternalID))
+		}
+	}
+
 	return faUser, false, ""
+}
+
+// parseExternalID extracts the user ID from a "prefix:UserID" external_id value.
+// If there is no colon, the entire value is returned as-is.
+func parseExternalID(externalID string) string {
+	_, after, found := strings.Cut(externalID, ":")
+	if !found {
+		return externalID
+	}
+	return strings.TrimSpace(after)
 }
 
 // isExcludedDomain returns true if the email belongs to one of the excluded domains.

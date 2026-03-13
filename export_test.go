@@ -54,7 +54,7 @@ func TestReadCSV(t *testing.T) {
 			{"id", "email", "normalized_email", "full_name", "created_at", "external_id", "mfa_enabled", "mfa_secret_key", "mfa_recovery_codes", "password_hash", "status"},
 			{plainHex(id[:]), "alice@example.com", "ALICE@EXAMPLE.COM", "Alice", "04/13/21 22:38", "", "false", "", "", plainHex([]byte(hash)), "1"},
 		})
-		users, err := ReadCSV(path, "us1")
+		users, err := ReadCSV(path, "us1", true)
 		require.NoError(t, err)
 		require.Len(t, users, 1)
 		u := users[0]
@@ -73,7 +73,7 @@ func TestReadCSV(t *testing.T) {
 			{"id", "email", "password_hash", "status", "created_at", "mfa_enabled", "mfa_secret_key", "mfa_recovery_codes"},
 			{plainHex(mfaID[:]), "mfa@example.com", plainHex([]byte(hash)), "1", "04/13/21 22:38", "true", "JBSWY3DPEHPK3PXP", `["code1","code2"]`},
 		})
-		users, err := ReadCSV(path, "us1")
+		users, err := ReadCSV(path, "us1", true)
 		require.NoError(t, err)
 		require.True(t, users[0].MFAEnabled)
 		require.Equal(t, []string{"code1", "code2"}, users[0].MFARecoveryCodes)
@@ -85,7 +85,7 @@ func TestReadCSV(t *testing.T) {
 			{"id", "email", "password_hash", "status", "created_at", "mfa_enabled"},
 			{plainHex(normID[:]), "Test@Example.COM", plainHex([]byte(hash)), "1", "04/13/21 22:38", "false"},
 		})
-		users, err := ReadCSV(path, "us1")
+		users, err := ReadCSV(path, "us1", true)
 		require.NoError(t, err)
 		require.Equal(t, "TEST@EXAMPLE.COM", users[0].NormalizedEmail)
 	})
@@ -150,7 +150,7 @@ func TestBuildFusionAuthUsers(t *testing.T) {
 			FullName: "Alice Smith", PasswordHash: hash,
 			Status: 1, CreatedAt: time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC), SatelliteName: "us1",
 		}
-		faUser, skip, _ := buildFusionAuthUser(log, primary, []RawUser{primary}, false, appID, tenantID)
+		faUser, skip, _ := buildFusionAuthUser(log, primary, []RawUser{primary}, false, appID, tenantID, "")
 		require.False(t, skip)
 		require.Equal(t, "bcrypt", faUser.EncryptionScheme)
 		require.Equal(t, 10, faUser.Factor)
@@ -168,7 +168,7 @@ func TestBuildFusionAuthUsers(t *testing.T) {
 				PasswordHash: hash, Status: 1, SatelliteName: "eu1"},
 		}
 		primary := PrimaryUser(users, precedence)
-		faUser, skip, _ := buildFusionAuthUser(log, primary, users, true, appID, tenantID)
+		faUser, skip, _ := buildFusionAuthUser(log, primary, users, true, appID, tenantID, "")
 		require.False(t, skip)
 		require.Empty(t, faUser.Password)
 		require.Len(t, faUser.Registrations, 1)
@@ -181,14 +181,14 @@ func TestBuildFusionAuthUsers(t *testing.T) {
 
 	t.Run("skip user without password hash and no external id", func(t *testing.T) {
 		primary := RawUser{ID: testrand.UUID(), Email: "nohash@example.com", Status: 1, SatelliteName: "us1"}
-		_, skip, reason := buildFusionAuthUser(log, primary, []RawUser{primary}, false, appID, tenantID)
+		_, skip, reason := buildFusionAuthUser(log, primary, []RawUser{primary}, false, appID, tenantID, "")
 		require.True(t, skip)
 		require.Equal(t, "no_hash", reason)
 	})
 
 	t.Run("SSO user without password hash is exported", func(t *testing.T) {
 		primary := RawUser{ID: testrand.UUID(), Email: "sso@example.com", ExternalID: "entra:some-oid", Status: 1, SatelliteName: "us1"}
-		faUser, skip, _ := buildFusionAuthUser(log, primary, []RawUser{primary}, false, appID, tenantID)
+		faUser, skip, _ := buildFusionAuthUser(log, primary, []RawUser{primary}, false, appID, tenantID, "")
 		require.False(t, skip)
 		require.Empty(t, faUser.Password)
 		require.Empty(t, faUser.EncryptionScheme)
@@ -203,7 +203,7 @@ func TestBuildFusionAuthUsers(t *testing.T) {
 			Status: 1, MFAEnabled: true, MFASecretKey: "JBSWY3DPEHPK3PXP",
 			MFARecoveryCodes: []string{"code1", "code2"}, SatelliteName: "us1",
 		}
-		faUser, skip, _ := buildFusionAuthUser(log, primary, []RawUser{primary}, false, appID, tenantID)
+		faUser, skip, _ := buildFusionAuthUser(log, primary, []RawUser{primary}, false, appID, tenantID, "")
 		require.False(t, skip)
 		require.NotNil(t, faUser.TwoFactor)
 		require.Len(t, faUser.TwoFactor.Methods, 1)
@@ -224,7 +224,7 @@ func TestBuildFusionAuthUsers(t *testing.T) {
 				PasswordHash: hash, Status: 1, SatelliteName: "eu1",
 			}},
 		})
-		faUsers, _, stats := buildAllFusionAuthUsers(log, idx, appID, precedence, tenantID, nil)
+		faUsers, _, stats := buildAllFusionAuthUsers(log, idx, appID, precedence, tenantID, nil, "")
 		require.Len(t, faUsers, 1)
 		prevIDs, ok := faUsers[0].Data["previousExternalIds"].(map[string]string)
 		require.True(t, ok)
@@ -242,7 +242,7 @@ func TestBuildFusionAuthUsers(t *testing.T) {
 					PasswordHash: hash, Status: 1, SatelliteName: "us1"},
 			},
 		})
-		faUsers, _, stats := buildAllFusionAuthUsers(log, idx, appID, precedence, tenantID, []string{"storj.io"})
+		faUsers, _, stats := buildAllFusionAuthUsers(log, idx, appID, precedence, tenantID, []string{"storj.io"}, "")
 		require.Len(t, faUsers, 1)
 		require.Equal(t, "external@example.com", faUsers[0].Email)
 		require.Equal(t, 1, stats.SkippedDomain)
@@ -273,4 +273,3 @@ func writeCSV(t *testing.T, rows [][]string) string {
 func plainHex(b []byte) string {
 	return fmt.Sprintf("%x", b)
 }
-
