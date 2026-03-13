@@ -17,6 +17,7 @@ import (
 // SendPasswordResetsConfig holds configuration for the send-password-resets command.
 type SendPasswordResetsConfig struct {
 	FusionAuthURL string
+	TenantID      string
 	APIKey        string
 	ConflictFile  string
 	DryRun        bool
@@ -27,6 +28,9 @@ func (c *SendPasswordResetsConfig) VerifyFlags() error {
 	var g errs.Group
 	if c.FusionAuthURL == "" {
 		g.Add(errs.New("--fusionauth-url is required"))
+	}
+	if c.TenantID == "" {
+		g.Add(errs.New("--fusionauth-tenant-id is required"))
 	}
 	if c.APIKey == "" {
 		g.Add(errs.New("--api-key is required"))
@@ -64,7 +68,7 @@ func SendPasswordResets(ctx context.Context, log *zap.Logger, cfg *SendPasswordR
 			continue
 		}
 
-		if err := sendForgotPassword(ctx, client, url, cfg.APIKey, entry); err != nil {
+		if err := sendForgotPassword(ctx, client, url, cfg.APIKey, cfg.TenantID, entry); err != nil {
 			log.Error("Failed to send password reset", zap.String("email", entry.Email), zap.Error(err))
 			failed++
 		} else {
@@ -85,7 +89,7 @@ func SendPasswordResets(ctx context.Context, log *zap.Logger, cfg *SendPasswordR
 	return nil
 }
 
-func sendForgotPassword(ctx context.Context, client *http.Client, url, apiKey string, entry ConflictUserEntry) (err error) {
+func sendForgotPassword(ctx context.Context, client *http.Client, url, apiKey, tenantID string, entry ConflictUserEntry) (err error) {
 	body, err := json.Marshal(map[string]interface{}{
 		"loginId":                 entry.Email,
 		"applicationId":           entry.ApplicationID,
@@ -101,6 +105,7 @@ func sendForgotPassword(ctx context.Context, client *http.Client, url, apiKey st
 	}
 	req.Header.Set("Authorization", apiKey)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-FusionAuth-TenantId", tenantID)
 
 	resp, err := client.Do(req)
 	if err != nil {

@@ -6,19 +6,27 @@ package main
 // FusionAuthUser represents a user in FusionAuth import format.
 // For conflict users, Password/Salt/Factor/EncryptionScheme are omitted (zero values + omitempty).
 type FusionAuthUser struct {
-	Active           bool                     `json:"active"`
-	Email            string                   `json:"email"`
-	EncryptionScheme string                   `json:"encryptionScheme,omitempty"`
-	Factor           int                      `json:"factor,omitempty"`
-	FullName         string                   `json:"fullName,omitempty"`
-	InsertInstant    int64                    `json:"insertInstant,omitempty"`
-	Password         string                   `json:"password,omitempty"`
-	Salt             string                   `json:"salt,omitempty"`
-	TenantID         string                   `json:"tenantId,omitempty"`
-	Verified         bool                     `json:"verified"`
-	Data             map[string]interface{}   `json:"data,omitempty"`
-	Registrations    []FusionAuthRegistration `json:"registrations,omitempty"`
-	TwoFactor        *FusionAuthTwoFactor     `json:"twoFactor,omitempty"`
+	Active           bool                            `json:"active"`
+	Email            string                          `json:"email"`
+	EncryptionScheme string                          `json:"encryptionScheme,omitempty"`
+	Factor           int                             `json:"factor,omitempty"`
+	FullName         string                          `json:"fullName,omitempty"`
+	InsertInstant    int64                           `json:"insertInstant,omitempty"`
+	Password         string                          `json:"password,omitempty"`
+	Salt             string                          `json:"salt,omitempty"`
+	TenantID         string                          `json:"tenantId,omitempty"`
+	Verified         bool                            `json:"verified"`
+	Data             map[string]interface{}          `json:"data,omitempty"`
+	Registrations    []FusionAuthRegistration        `json:"registrations,omitempty"`
+	TwoFactor        *FusionAuthTwoFactor            `json:"twoFactor,omitempty"`
+	Link             *FusionAuthIdentityProviderLink `json:"link,omitempty"`
+}
+
+// FusionAuthIdentityProviderLink represents an identity provider link for a user.
+type FusionAuthIdentityProviderLink struct {
+	IdentityProviderID     string `json:"identityProviderId"`
+	IdentityProviderUserID string `json:"identityProviderUserId"`
+	DisplayName            string `json:"displayName,omitempty"`
 }
 
 // FusionAuthRegistration represents a per-application registration.

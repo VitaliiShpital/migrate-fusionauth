@@ -21,9 +21,11 @@ import (
 // BackfillConfig holds configuration for the backfill-external-ids command.
 type BackfillConfig struct {
 	FusionAuthURL          string
+	TenantID               string
 	APIKey                 string
 	OutputDir              string
 	ExcludeEmailDomainList string
+	RawCSV                 bool
 	DryRun                 bool
 
 	// CSV inputs — reuse the same per-satellite flags as the export command.
@@ -50,6 +52,9 @@ func (c *BackfillConfig) VerifyFlags() error {
 	var g errs.Group
 	if c.FusionAuthURL == "" {
 		g.Add(errs.New("--fusionauth-url is required"))
+	}
+	if c.TenantID == "" {
+		g.Add(errs.New("--fusionauth-tenant-id is required"))
 	}
 	if c.APIKey == "" {
 		g.Add(errs.New("--api-key is required"))
@@ -105,7 +110,7 @@ const faSearchPageSize = 10000
 func BackfillExternalIDs(ctx context.Context, log *zap.Logger, cfg *BackfillConfig) error {
 	log.Info("Fetching users from FusionAuth", zap.String("url", cfg.FusionAuthURL))
 
-	emailToFAID, err := fetchAllFAUsers(ctx, cfg.FusionAuthURL, cfg.APIKey)
+	emailToFAID, err := fetchAllFAUsers(ctx, cfg.FusionAuthURL, cfg.TenantID, cfg.APIKey)
 	if err != nil {
 		return errs.New("fetch FusionAuth users: %w", err)
 	}
@@ -119,7 +124,7 @@ func BackfillExternalIDs(ctx context.Context, log *zap.Logger, cfg *BackfillConf
 
 	excludeDomains := cfg.ExcludeEmailDomains()
 	for _, sat := range cfg.satellites() {
-		users, err := ReadCSV(sat.csv, sat.name)
+		users, err := ReadCSV(sat.csv, sat.name, !cfg.RawCSV)
 		if err != nil {
 			return errs.New("read CSV for %s: %w", sat.name, err)
 		}
@@ -136,10 +141,15 @@ func BackfillExternalIDs(ctx context.Context, log *zap.Logger, cfg *BackfillConf
 				missing++
 				continue
 			}
-			statements = append(statements,
-				fmt.Sprintf("UPDATE users SET external_id = '%s' WHERE normalized_email = '%s';",
-					faID, strings.ReplaceAll(u.NormalizedEmail, "'", "''")),
-			)
+			var tenantClause string
+			if u.TenantID == "" {
+				tenantClause = "(tenant_id IS NULL OR tenant_id = '')"
+			} else {
+				tenantClause = fmt.Sprintf("tenant_id = '%s'", strings.ReplaceAll(u.TenantID, "'", "''"))
+			}
+			stmt := fmt.Sprintf("UPDATE users SET external_id = '%s' WHERE normalized_email = '%s' AND %s",
+				faID, strings.ReplaceAll(u.NormalizedEmail, "'", "''"), tenantClause)
+			statements = append(statements, stmt+";")
 			matched++
 		}
 
@@ -165,7 +175,7 @@ func BackfillExternalIDs(ctx context.Context, log *zap.Logger, cfg *BackfillConf
 	return nil
 }
 
-func fetchAllFAUsers(ctx context.Context, baseURL, apiKey string) (map[string]string, error) {
+func fetchAllFAUsers(ctx context.Context, baseURL, tenantID, apiKey string) (map[string]string, error) {
 	client := &http.Client{}
 	url := baseURL + "/api/user/search"
 	emailToFAID := make(map[string]string)
@@ -188,6 +198,7 @@ func fetchAllFAUsers(ctx context.Context, baseURL, apiKey string) (map[string]st
 		}
 		req.Header.Set("Authorization", apiKey)
 		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-FusionAuth-TenantId", tenantID)
 
 		resp, err := client.Do(req)
 		if err != nil {
