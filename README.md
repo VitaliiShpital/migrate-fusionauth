@@ -88,18 +88,18 @@ Both groups are written to `fusionauth-import.json`. A separate `conflict-users.
 
 ### Flags
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--csv-{us1,eu1,ap1,qa,slc}` | | Path to the CSV for that satellite |
-| `--fusionauth-tenant-id` | | FusionAuth tenant ID |
-| `--app-id` | | FusionAuth Application ID (shared across all satellites) |
-| `--identity-provider-id` | | FusionAuth IdP UUID; when set, users with a non-empty `external_id` get a `link` embedded in the export |
-| `--conflict-precedence` | `us1,eu1,ap1,slc` | Satellite priority for conflict users (highest first) |
-| `--exclude-email-domains` | | Comma-separated domains to skip (e.g. `storj.io`) |
-| `--raw-csv` | `false` | Parse CSVs as direct satellite exports rather than Redash format |
-| `--output` | `fusionauth-import.json` | Output file for the FusionAuth import payload |
-| `--conflict-output` | `conflict-users.json` | Output file listing conflict users |
-| `--dry-run` | `false` | Print stats without writing files |
+| Flag                         | Default                  | Description                                                                                             |
+|------------------------------|--------------------------|---------------------------------------------------------------------------------------------------------|
+| `--csv-{us1,eu1,ap1,qa,slc}` |                          | Path to the CSV for that satellite                                                                      |
+| `--fusionauth-tenant-id`     |                          | FusionAuth tenant ID                                                                                    |
+| `--app-id`                   |                          | FusionAuth Application ID (shared across all satellites)                                                |
+| `--identity-provider-id`     |                          | FusionAuth IdP UUID; when set, users with a non-empty `external_id` get a `link` embedded in the export |
+| `--conflict-precedence`      | `us1,eu1,ap1,slc`        | Satellite priority for conflict users (highest first)                                                   |
+| `--exclude-email-domains`    |                          | Comma-separated domains to skip (e.g. `storj.io`)                                                       |
+| `--raw-csv`                  | `false`                  | Parse CSVs as direct satellite exports rather than Redash format                                        |
+| `--output`                   | `fusionauth-import.json` | Output file for the FusionAuth import payload                                                           |
+| `--conflict-output`          | `conflict-users.json`    | Output file listing conflict users                                                                      |
+| `--dry-run`                  | `false`                  | Print stats without writing files                                                                       |
 
 ## Step 3 — Import into FusionAuth
 
@@ -115,14 +115,14 @@ The tool splits the file into batches (default 1000 users each) and sends them s
 
 For users that carry an identity provider `link` (set during export via `--identity-provider-id`), the import performs a second step after each batch: it looks up each such user by email (`GET /api/user?email=...`) and calls `POST /api/identity-provider/link` to attach the IdP identity. Link failures are logged as warnings and do not abort the import.
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--fusionauth-url` | | FusionAuth base URL |
-| `--fusionauth-tenant-id` | | FusionAuth tenant ID |
-| `--api-key` | | FusionAuth API key |
-| `--input` | `fusionauth-import.json` | Import file from Step 2 |
-| `--batch-size` | `1000` | Users per request |
-| `--dry-run` | `false` | Print batch plan without sending requests |
+| Flag                     | Default                  | Description                               |
+|--------------------------|--------------------------|-------------------------------------------|
+| `--fusionauth-url`       |                          | FusionAuth base URL                       |
+| `--fusionauth-tenant-id` |                          | FusionAuth tenant ID                      |
+| `--api-key`              |                          | FusionAuth API key                        |
+| `--input`                | `fusionauth-import.json` | Import file from Step 2                   |
+| `--batch-size`           | `1000`                   | Users per request                         |
+| `--dry-run`              | `false`                  | Print batch plan without sending requests |
 
 ## Step 4 — Send password resets to conflict users
 
@@ -138,13 +138,13 @@ This calls FusionAuth's `/api/user/forgot-password` for each conflict user, trig
 
 Use `--dry-run` to preview what would be sent without making any HTTP requests.
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--fusionauth-url` | | FusionAuth base URL |
-| `--fusionauth-tenant-id` | | FusionAuth tenant ID |
-| `--api-key` | | FusionAuth API key |
-| `--conflict-file` | `conflict-users.json` | Conflict users file from Step 2 |
-| `--dry-run` | `false` | Print what would be sent without making requests |
+| Flag                     | Default               | Description                                      |
+|--------------------------|-----------------------|--------------------------------------------------|
+| `--fusionauth-url`       |                       | FusionAuth base URL                              |
+| `--fusionauth-tenant-id` |                       | FusionAuth tenant ID                             |
+| `--api-key`              |                       | FusionAuth API key                               |
+| `--conflict-file`        | `conflict-users.json` | Conflict users file from Step 2                  |
+| `--dry-run`              | `false`               | Print what would be sent without making requests |
 
 ## Step 5 — Backfill external_id in satellite DBs
 
@@ -185,27 +185,27 @@ Use `--dry-run` to print match/missing statistics without writing any files.
 
 ### Flags
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--fusionauth-url` | | FusionAuth base URL |
-| `--fusionauth-tenant-id` | | FusionAuth tenant ID (required; scopes user search to this tenant) |
-| `--api-key` | | FusionAuth API key |
-| `--csv-{us1,eu1,ap1,qa,slc}` | | Same CSVs used in the export step |
-| `--raw-csv` | `false` | Parse CSVs as direct satellite exports rather than Redash format |
-| `--output-dir` | `.` | Directory for generated `.sql` files |
-| `--dry-run` | `false` | Print stats without writing files |
+| Flag                         | Default | Description                                                        |
+|------------------------------|---------|--------------------------------------------------------------------|
+| `--fusionauth-url`           |         | FusionAuth base URL                                                |
+| `--fusionauth-tenant-id`     |         | FusionAuth tenant ID (required; scopes user search to this tenant) |
+| `--api-key`                  |         | FusionAuth API key                                                 |
+| `--csv-{us1,eu1,ap1,qa,slc}` |         | Same CSVs used in the export step                                  |
+| `--raw-csv`                  | `false` | Parse CSVs as direct satellite exports rather than Redash format   |
+| `--output-dir`               | `.`     | Directory for generated `.sql` files                               |
+| `--dry-run`                  | `false` | Print stats without writing files                                  |
 
 ## User data mapping
 
-| Satellite field | FusionAuth field | Notes |
-|----------------|-----------------|-------|
-| `id` | `data.storjUserId` | Original satellite UUID |
-| `email` | `email` | |
-| `password_hash` | `password` + `salt` + `factor` | bcrypt split; omitted for conflict users |
-| `status = 1` | `verified: true` | |
-| `created_at` | `insertInstant` | Unix milliseconds; export fails fast if the value cannot be parsed |
-| `mfa_secret_key` + `mfa_recovery_codes` | `twoFactor` | TOTP secret converted from base32 to base64 |
-| `satellite name` | `data.sourceSatellite`, `registrations[].applicationId` | |
-| `external_id` | `data.previousExternalIds` | Map of `{ "us1": "<old-id>", ... }` for all satellites where the user had a non-empty `external_id`; omitted if none. Preserved for rollback purposes. |
-| `external_id` (with `--identity-provider-id`) | `link.identityProviderUserId` | Parsed from `<prefix>:<UserID>` or `<UserID>`; linked via `POST /api/identity-provider/link` during import |
-| `tenant_id` | _(not imported)_ | Used in backfill SQL `WHERE` clause to disambiguate rows with the same normalized email across tenants |
+| Satellite field                               | FusionAuth field                                        | Notes                                                                                                                                                  |
+|-----------------------------------------------|---------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `id`                                          | `data.storjUserId`                                      | Original satellite UUID                                                                                                                                |
+| `email`                                       | `email`                                                 |                                                                                                                                                        |
+| `password_hash`                               | `password` + `salt` + `factor`                          | bcrypt split; omitted for conflict users                                                                                                               |
+| `status = 1`                                  | `verified: true`                                        |                                                                                                                                                        |
+| `created_at`                                  | `insertInstant`                                         | Unix milliseconds; export fails fast if the value cannot be parsed                                                                                     |
+| `mfa_secret_key` + `mfa_recovery_codes`       | `twoFactor`                                             | TOTP secret converted from base32 to base64                                                                                                            |
+| `satellite name`                              | `data.sourceSatellite`, `registrations[].applicationId` |                                                                                                                                                        |
+| `external_id`                                 | `data.previousExternalIds`                              | Map of `{ "us1": "<old-id>", ... }` for all satellites where the user had a non-empty `external_id`; omitted if none. Preserved for rollback purposes. |
+| `external_id` (with `--identity-provider-id`) | `link.identityProviderUserId`                           | Parsed from `<prefix>:<UserID>` or `<UserID>`; linked via `POST /api/identity-provider/link` during import                                             |
+| `tenant_id`                                   | _(not imported)_                                        | Used in backfill SQL `WHERE` clause to disambiguate rows with the same normalized email across tenants                                                 |
