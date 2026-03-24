@@ -139,6 +139,7 @@ func TestConflictDetectionAndPrecedence(t *testing.T) {
 func TestBuildFusionAuthUsers(t *testing.T) {
 	log := zaptest.NewLogger(t)
 	appID := "app-id"
+	appIDs := map[string]string{"us1": appID, "eu1": appID, "ap1": appID}
 	tenantID := "tenant-id"
 	precedence := []string{"us1", "eu1", "ap1"}
 	hash := []byte("$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy")
@@ -224,7 +225,7 @@ func TestBuildFusionAuthUsers(t *testing.T) {
 				PasswordHash: hash, Status: 1, SatelliteName: "eu1",
 			}},
 		})
-		faUsers, _, stats := buildAllFusionAuthUsers(log, idx, appID, precedence, tenantID, nil, "")
+		faUsers, _, stats := buildAllFusionAuthUsers(log, idx, appIDs, precedence, tenantID, nil, "")
 		require.Len(t, faUsers, 1)
 		prevIDs, ok := faUsers[0].Data["previousExternalIds"].(map[string]string)
 		require.True(t, ok)
@@ -242,7 +243,7 @@ func TestBuildFusionAuthUsers(t *testing.T) {
 					PasswordHash: hash, Status: 1, SatelliteName: "us1"},
 			},
 		})
-		faUsers, _, stats := buildAllFusionAuthUsers(log, idx, appID, precedence, tenantID, []string{"storj.io"}, "")
+		faUsers, _, stats := buildAllFusionAuthUsers(log, idx, appIDs, precedence, tenantID, []string{"storj.io"}, "")
 		require.Len(t, faUsers, 1)
 		require.Equal(t, "external@example.com", faUsers[0].Email)
 		require.Equal(t, 1, stats.SkippedDomain)
