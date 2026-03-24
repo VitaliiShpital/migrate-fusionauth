@@ -26,12 +26,14 @@ type Config struct {
 	CSVAP1 string
 	CSVQA  string
 	CSVSLC string
+	CSVUK1 string
 
 	AppIDUS1 string
 	AppIDEU1 string
 	AppIDSLC string
 	AppIDAP1 string
 	AppIDQA  string
+	AppIDUK1 string
 
 	FusionAuthTenantID     string
 	IdentityProviderID     string
@@ -51,6 +53,7 @@ func (c *Config) AppIDs() map[string]string {
 		"ap1": c.AppIDAP1,
 		"qa":  c.AppIDQA,
 		"slc": c.AppIDSLC,
+		"uk1": c.AppIDUK1,
 	}
 	result := make(map[string]string)
 	for k, v := range all {
@@ -69,6 +72,7 @@ func (c *Config) Satellites() []SatelliteConfig {
 		{"ap1", c.CSVAP1},
 		{"qa", c.CSVQA},
 		{"slc", c.CSVSLC},
+		{"uk1", c.CSVUK1},
 	}
 	var result []SatelliteConfig
 	for _, s := range all {
@@ -175,15 +179,17 @@ func init() {
 	f.StringVar(&cfg.CSVAP1, "csv-ap1", "", "CSV file path for ap1 satellite")
 	f.StringVar(&cfg.CSVQA, "csv-qa", "", "CSV file path for qa satellite")
 	f.StringVar(&cfg.CSVSLC, "csv-slc", "", "CSV file path for slc satellite")
+	f.StringVar(&cfg.CSVUK1, "csv-uk1", "", "CSV file path for uk1 satellite")
 	f.StringVar(&cfg.FusionAuthTenantID, "fusionauth-tenant-id", "", "FusionAuth tenant ID")
 	f.StringVar(&cfg.AppIDUS1, "app-id-us1", "", "FusionAuth Application ID for us1")
 	f.StringVar(&cfg.AppIDEU1, "app-id-eu1", "", "FusionAuth Application ID for eu1")
 	f.StringVar(&cfg.AppIDAP1, "app-id-ap1", "", "FusionAuth Application ID for ap1")
 	f.StringVar(&cfg.AppIDQA, "app-id-qa", "", "FusionAuth Application ID for qa")
 	f.StringVar(&cfg.AppIDSLC, "app-id-slc", "", "FusionAuth Application ID for slc")
+	f.StringVar(&cfg.AppIDUK1, "app-id-uk1", "", "FusionAuth Application ID for uk1")
 	f.StringVar(&cfg.OutputFile, "output", "fusionauth-import.json", "Output file for FusionAuth import JSON")
 	f.StringVar(&cfg.ConflictOutputFile, "conflict-output", "conflict-users.json", "Output file listing conflict users")
-	f.StringVar(&cfg.ConflictPrecedence, "conflict-precedence", "us1,eu1,ap1,slc", "Comma-separated satellite precedence for conflict users (highest first)")
+	f.StringVar(&cfg.ConflictPrecedence, "conflict-precedence", "us1,eu1,ap1,slc,uk1", "Comma-separated satellite precedence for conflict users (highest first)")
 	f.StringVar(&cfg.IdentityProviderID, "identity-provider-id", "", "FusionAuth identity provider ID to embed in Link for users with an external_id (optional)")
 	f.StringVar(&cfg.ExcludeEmailDomainList, "exclude-email-domains", "", "Comma-separated email domains to skip (e.g. storj.io)")
 	f.BoolVar(&cfg.RawCSV, "raw-csv", false, "Parse CSVs as direct satellite exports (plain string IDs, raw timestamp) instead of Redash format")
@@ -207,6 +213,7 @@ func init() {
 	bf.StringVar(&backfillCfg.CSVAP1, "csv-ap1", "", "CSV file path for ap1 satellite")
 	bf.StringVar(&backfillCfg.CSVQA, "csv-qa", "", "CSV file path for qa satellite")
 	bf.StringVar(&backfillCfg.CSVSLC, "csv-slc", "", "CSV file path for slc satellite")
+	bf.StringVar(&backfillCfg.CSVUK1, "csv-uk1", "", "CSV file path for uk1 satellite")
 	bf.StringVar(&backfillCfg.OutputDir, "output-dir", "", "Directory for generated SQL files (default: current dir)")
 	bf.StringVar(&backfillCfg.ExcludeEmailDomainList, "exclude-email-domains", "", "Comma-separated email domains to skip (same as used in export)")
 	bf.BoolVar(&backfillCfg.RawCSV, "raw-csv", false, "Parse CSVs as direct satellite exports (plain string IDs, raw timestamp) instead of Redash format")

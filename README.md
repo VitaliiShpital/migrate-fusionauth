@@ -83,7 +83,7 @@ The `external_id` value is expected to be either `<prefix>:<UserID>` (e.g. `entr
 
 ### Conflict detection
 
-A **conflict** is when the same email (case-insensitive) exists on more than one satellite. Conflict users are exported **without a password** — they must reset it after migration. A single FusionAuth registration is created for the highest-precedence satellite (default order: `us1 > eu1 > ap1 > slc`, configurable via `--conflict-precedence`).
+A **conflict** is when the same email (case-insensitive) exists on more than one satellite. Conflict users are exported **without a password** — they must reset it after migration. A single FusionAuth registration is created for the highest-precedence satellite (default order: `us1 > eu1 > ap1 > slc > uk1`, configurable via `--conflict-precedence`).
 
 Non-conflict users are exported with their bcrypt password hash split into the components FusionAuth expects (`factor`, `salt`, `password`).
 
@@ -91,18 +91,18 @@ Both groups are written to `fusionauth-import.json`. A separate `conflict-users.
 
 ### Flags
 
-| Flag                            | Default                  | Description                                                                                             |
-|---------------------------------|--------------------------|---------------------------------------------------------------------------------------------------------|
-| `--csv-{us1,eu1,ap1,qa,slc}`    |                          | Path to the CSV for that satellite                                                                      |
-| `--fusionauth-tenant-id`        |                          | FusionAuth tenant ID                                                                                    |
-| `--app-id-{us1,eu1,ap1,qa,slc}` |                          | FusionAuth Application ID for that satellite (required for each satellite with a CSV)                   |
-| `--identity-provider-id`        |                          | FusionAuth IdP UUID; when set, users with a non-empty `external_id` get a `link` embedded in the export |
-| `--conflict-precedence`         | `us1,eu1,ap1,slc`        | Satellite priority for conflict users (highest first)                                                   |
-| `--exclude-email-domains`       |                          | Comma-separated domains to skip (e.g. `storj.io`)                                                       |
-| `--raw-csv`                     | `false`                  | Parse CSVs as direct satellite exports rather than Redash format                                        |
-| `--output`                      | `fusionauth-import.json` | Output file for the FusionAuth import payload                                                           |
-| `--conflict-output`             | `conflict-users.json`    | Output file listing conflict users                                                                      |
-| `--dry-run`                     | `false`                  | Print stats without writing files                                                                       |
+| Flag                                | Default                  | Description                                                                                             |
+|-------------------------------------|--------------------------|---------------------------------------------------------------------------------------------------------|
+| `--csv-{us1,eu1,ap1,qa,slc,uk1}`    |                          | Path to the CSV for that satellite                                                                      |
+| `--fusionauth-tenant-id`            |                          | FusionAuth tenant ID                                                                                    |
+| `--app-id-{us1,eu1,ap1,qa,slc,uk1}` |                          | FusionAuth Application ID for that satellite (required for each satellite with a CSV)                   |
+| `--identity-provider-id`            |                          | FusionAuth IdP UUID; when set, users with a non-empty `external_id` get a `link` embedded in the export |
+| `--conflict-precedence`             | `us1,eu1,ap1,slc`        | Satellite priority for conflict users (highest first)                                                   |
+| `--exclude-email-domains`           |                          | Comma-separated domains to skip (e.g. `storj.io`)                                                       |
+| `--raw-csv`                         | `false`                  | Parse CSVs as direct satellite exports rather than Redash format                                        |
+| `--output`                          | `fusionauth-import.json` | Output file for the FusionAuth import payload                                                           |
+| `--conflict-output`                 | `conflict-users.json`    | Output file listing conflict users                                                                      |
+| `--dry-run`                         | `false`                  | Print stats without writing files                                                                       |
 
 ## Step 3 — Import into FusionAuth
 
@@ -188,15 +188,15 @@ Use `--dry-run` to print match/missing statistics without writing any files.
 
 ### Flags
 
-| Flag                         | Default | Description                                                        |
-|------------------------------|---------|--------------------------------------------------------------------|
-| `--fusionauth-url`           |         | FusionAuth base URL                                                |
-| `--fusionauth-tenant-id`     |         | FusionAuth tenant ID (required; scopes user search to this tenant) |
-| `--api-key`                  |         | FusionAuth API key                                                 |
-| `--csv-{us1,eu1,ap1,qa,slc}` |         | Same CSVs used in the export step                                  |
-| `--raw-csv`                  | `false` | Parse CSVs as direct satellite exports rather than Redash format   |
-| `--output-dir`               | `.`     | Directory for generated `.sql` files                               |
-| `--dry-run`                  | `false` | Print stats without writing files                                  |
+| Flag                             | Default | Description                                                        |
+|----------------------------------|---------|--------------------------------------------------------------------|
+| `--fusionauth-url`               |         | FusionAuth base URL                                                |
+| `--fusionauth-tenant-id`         |         | FusionAuth tenant ID (required; scopes user search to this tenant) |
+| `--api-key`                      |         | FusionAuth API key                                                 |
+| `--csv-{us1,eu1,ap1,qa,slc,uk1}` |         | Same CSVs used in the export step                                  |
+| `--raw-csv`                      | `false` | Parse CSVs as direct satellite exports rather than Redash format   |
+| `--output-dir`                   | `.`     | Directory for generated `.sql` files                               |
+| `--dry-run`                      | `false` | Print stats without writing files                                  |
 
 ## User data mapping
 
