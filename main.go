@@ -27,8 +27,13 @@ type Config struct {
 	CSVQA  string
 	CSVSLC string
 
+	AppIDUS1 string
+	AppIDEU1 string
+	AppIDSLC string
+	AppIDAP1 string
+	AppIDQA  string
+
 	FusionAuthTenantID     string
-	FusionAuthAppID        string
 	IdentityProviderID     string
 	OutputFile             string
 	ConflictOutputFile     string
@@ -36,6 +41,24 @@ type Config struct {
 	ExcludeEmailDomainList string
 	RawCSV                 bool
 	DryRun                 bool
+}
+
+// AppIDs returns a map of satellite name to application ID for all configured satellites.
+func (c *Config) AppIDs() map[string]string {
+	all := map[string]string{
+		"us1": c.AppIDUS1,
+		"eu1": c.AppIDEU1,
+		"ap1": c.AppIDAP1,
+		"qa":  c.AppIDQA,
+		"slc": c.AppIDSLC,
+	}
+	result := make(map[string]string)
+	for k, v := range all {
+		if v != "" {
+			result[k] = v
+		}
+	}
+	return result
 }
 
 // Satellites returns the list of configured satellites (those with a non-empty CSV path).
@@ -81,14 +104,30 @@ func (c *Config) ExcludeEmailDomains() []string {
 // VerifyFlags validates the export configuration.
 func (c *Config) VerifyFlags() error {
 	var g errs.Group
-	if len(c.Satellites()) == 0 {
+	sats := c.Satellites()
+	if len(sats) == 0 {
 		g.Add(errs.New("at least one satellite must be configured (use --csv-NAME flags)"))
 	}
 	if c.FusionAuthTenantID == "" {
 		g.Add(errs.New("--fusionauth-tenant-id is required"))
 	}
-	if c.FusionAuthAppID == "" {
-		g.Add(errs.New("--app-id is required"))
+	appIDs := c.AppIDs()
+	for _, sat := range sats {
+		if appIDs[sat.Name] == "" {
+			g.Add(errs.New("--app-id-%s is required for satellite %s", sat.Name, sat.Name))
+		}
+	}
+	seen := make(map[string]string) // appID -> satellite name
+	for _, sat := range sats {
+		appID := appIDs[sat.Name]
+		if appID == "" {
+			continue
+		}
+		if other, ok := seen[appID]; ok {
+			g.Add(errs.New("satellites %s and %s share the same app-id %q; each satellite must have a unique application ID", other, sat.Name, appID))
+		} else {
+			seen[appID] = sat.Name
+		}
 	}
 	return g.Err()
 }
@@ -137,7 +176,11 @@ func init() {
 	f.StringVar(&cfg.CSVQA, "csv-qa", "", "CSV file path for qa satellite")
 	f.StringVar(&cfg.CSVSLC, "csv-slc", "", "CSV file path for slc satellite")
 	f.StringVar(&cfg.FusionAuthTenantID, "fusionauth-tenant-id", "", "FusionAuth tenant ID")
-	f.StringVar(&cfg.FusionAuthAppID, "app-id", "", "FusionAuth Application ID")
+	f.StringVar(&cfg.AppIDUS1, "app-id-us1", "", "FusionAuth Application ID for us1")
+	f.StringVar(&cfg.AppIDEU1, "app-id-eu1", "", "FusionAuth Application ID for eu1")
+	f.StringVar(&cfg.AppIDAP1, "app-id-ap1", "", "FusionAuth Application ID for ap1")
+	f.StringVar(&cfg.AppIDQA, "app-id-qa", "", "FusionAuth Application ID for qa")
+	f.StringVar(&cfg.AppIDSLC, "app-id-slc", "", "FusionAuth Application ID for slc")
 	f.StringVar(&cfg.OutputFile, "output", "fusionauth-import.json", "Output file for FusionAuth import JSON")
 	f.StringVar(&cfg.ConflictOutputFile, "conflict-output", "conflict-users.json", "Output file listing conflict users")
 	f.StringVar(&cfg.ConflictPrecedence, "conflict-precedence", "us1,eu1,ap1,slc", "Comma-separated satellite precedence for conflict users (highest first)")

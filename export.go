@@ -42,7 +42,7 @@ func Export(log *zap.Logger, cfg *Config) error {
 
 	idx := BuildIndex(bySatellite)
 
-	faUsers, conflictEntries, stats := buildAllFusionAuthUsers(log, idx, cfg.FusionAuthAppID, cfg.Precedence(), cfg.FusionAuthTenantID, cfg.ExcludeEmailDomains(), cfg.IdentityProviderID)
+	faUsers, conflictEntries, stats := buildAllFusionAuthUsers(log, idx, cfg.AppIDs(), cfg.Precedence(), cfg.FusionAuthTenantID, cfg.ExcludeEmailDomains(), cfg.IdentityProviderID)
 
 	log.Info("Export statistics",
 		zap.Int("total_unique_emails", stats.TotalUniqueEmails),
@@ -90,7 +90,7 @@ func Export(log *zap.Logger, cfg *Config) error {
 func buildAllFusionAuthUsers(
 	log *zap.Logger,
 	idx UserIndex,
-	appID string,
+	appIDs map[string]string,
 	precedence []string,
 	tenantID string,
 	excludeDomains []string,
@@ -115,6 +115,7 @@ func buildAllFusionAuthUsers(
 			continue
 		}
 
+		appID := appIDs[primary.SatelliteName]
 		faUser, skip, reason := buildFusionAuthUser(log, primary, usersForEmail, isConflict, appID, tenantID, identityProviderID)
 		if skip {
 			switch reason {
