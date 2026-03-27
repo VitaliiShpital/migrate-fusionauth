@@ -7,8 +7,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
@@ -53,9 +55,10 @@ func SendPasswordResets(ctx context.Context, log *zap.Logger, cfg *SendPasswordR
 	log.Info("Sending password resets", zap.Int("count", len(entries)), zap.Bool("dry_run", cfg.DryRun))
 
 	client := &http.Client{}
-	url := cfg.FusionAuthURL + "/api/user/forgot-password"
+	baseURL := strings.TrimRight(cfg.FusionAuthURL, "/")
+	forgotPasswordURL := baseURL + "/api/user/forgot-password"
 
-	var succeeded, failed int
+	var succeeded, failed, patchFailed int
 	for _, entry := range entries {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -68,12 +71,23 @@ func SendPasswordResets(ctx context.Context, log *zap.Logger, cfg *SendPasswordR
 			continue
 		}
 
-		if err := sendForgotPassword(ctx, client, url, cfg.APIKey, cfg.TenantID, entry); err != nil {
+		if err := sendForgotPassword(ctx, client, forgotPasswordURL, cfg.APIKey, cfg.TenantID, entry); err != nil {
 			log.Error("Failed to send password reset", zap.String("email", entry.Email), zap.Error(err))
 			failed++
-		} else {
-			log.Info("Password reset sent", zap.String("email", entry.Email))
-			succeeded++
+			continue
+		}
+		log.Info("Password reset sent", zap.String("email", entry.Email))
+		succeeded++
+
+		userID, err := lookupUserID(ctx, client, baseURL, cfg.TenantID, cfg.APIKey, entry.Email)
+		if err != nil {
+			log.Warn("Failed to look up user for conflict flag, skipping patch", zap.String("email", entry.Email), zap.Error(err))
+			patchFailed++
+			continue
+		}
+		if err := patchUserConflictEmailSent(ctx, client, baseURL, cfg.TenantID, cfg.APIKey, userID); err != nil {
+			log.Warn("Failed to set conflictEmailSent on user", zap.String("email", entry.Email), zap.Error(err))
+			patchFailed++
 		}
 	}
 
@@ -82,7 +96,10 @@ func SendPasswordResets(ctx context.Context, log *zap.Logger, cfg *SendPasswordR
 		return nil
 	}
 
-	log.Info("Password resets complete", zap.Int("succeeded", succeeded), zap.Int("failed", failed))
+	log.Info("Password resets complete",
+		zap.Int("succeeded", succeeded),
+		zap.Int("failed", failed),
+		zap.Int("patch_failed", patchFailed))
 	if failed > 0 {
 		return errs.New("%d password resets failed (see logs above)", failed)
 	}
@@ -115,6 +132,39 @@ func sendForgotPassword(ctx context.Context, client *http.Client, url, apiKey, t
 
 	if resp.StatusCode != http.StatusOK {
 		return errs.New("unexpected status %d for %s", resp.StatusCode, entry.Email)
+	}
+	return nil
+}
+
+func patchUserConflictEmailSent(ctx context.Context, client *http.Client, baseURL, tenantID, apiKey, userID string) (err error) {
+	body, err := json.Marshal(map[string]interface{}{
+		"user": map[string]interface{}{
+			"data": map[string]interface{}{
+				"conflictEmailSent": true,
+			},
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, baseURL+"/api/user/"+userID, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-FusionAuth-TenantId", tenantID)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errs.Combine(err, resp.Body.Close()) }()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return errs.New("unexpected status %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
 	}
 	return nil
 }
