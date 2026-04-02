@@ -57,8 +57,9 @@ type FusionAuthAuthenticatorConfig struct {
 
 // FusionAuthImport represents the FusionAuth import request body.
 type FusionAuthImport struct {
-	Users            []FusionAuthUser `json:"users"`
-	ValidateDBSchema bool             `json:"validateDbSchema"`
+	Users                 []FusionAuthUser `json:"users"`
+	ValidateDBSchema      bool             `json:"validateDbSchema"`
+	ValidateDbConstraints bool             `json:"validateDbConstraints,omitempty"`
 }
 
 // ConflictUserEntry describes a conflict user for the follow-up forgot-password step.
