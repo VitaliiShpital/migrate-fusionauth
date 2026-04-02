@@ -19,12 +19,14 @@ import (
 
 // ImportConfig holds configuration for the import command.
 type ImportConfig struct {
-	FusionAuthURL string
-	TenantID      string
-	APIKey        string
-	InputFile     string
-	BatchSize     int
-	DryRun        bool
+	FusionAuthURL    string
+	TenantID         string
+	APIKey           string
+	InputFile        string
+	FailedOutputFile string
+	BatchSize        int
+	DryRun           bool
+	SkipExisting     bool
 }
 
 // VerifyFlags validates the import configuration.
@@ -90,6 +92,7 @@ func Import(ctx context.Context, log *zap.Logger, cfg *ImportConfig) error {
 	imported := 0
 	linked := 0
 	linkFailed := 0
+	var allFailed []FailedImportUser
 	for batchNum, start := 1, 0; start < total; batchNum, start = batchNum+1, start+cfg.BatchSize {
 		end := start + cfg.BatchSize
 		if end > total {
@@ -104,7 +107,16 @@ func Import(ctx context.Context, log *zap.Logger, cfg *ImportConfig) error {
 			stripped[i].Link = nil
 		}
 
-		if err := sendImportBatch(ctx, client, importURL, cfg.TenantID, cfg.APIKey, stripped); err != nil {
+		if cfg.SkipExisting {
+			skipped, failed, err := importWithSkipConflicts(ctx, log, client, importURL, cfg.TenantID, cfg.APIKey, stripped)
+			if err != nil {
+				return errs.New("batch %d (users %d-%d) failed: %w", batchNum, start+1, end, err)
+			}
+			allFailed = append(allFailed, failed...)
+			if skipped > 0 {
+				log.Info("Skipped users in batch", zap.Int("batch", batchNum), zap.Int("skipped", skipped), zap.Int("failed", len(failed)))
+			}
+		} else if err := sendImportBatch(ctx, client, importURL, cfg.TenantID, cfg.APIKey, stripped); err != nil {
 			return errs.New("batch %d (users %d-%d) failed: %w", batchNum, start+1, end, err)
 		}
 
@@ -139,22 +151,33 @@ func Import(ctx context.Context, log *zap.Logger, cfg *ImportConfig) error {
 	log.Info("Import complete",
 		zap.Int("total_imported", imported),
 		zap.Int("identity_links_created", linked),
-		zap.Int("identity_links_failed", linkFailed))
+		zap.Int("identity_links_failed", linkFailed),
+		zap.Int("failed_users", len(allFailed)))
+
+	if len(allFailed) > 0 && cfg.FailedOutputFile != "" {
+		failedData, err := json.MarshalIndent(allFailed, "", "  ")
+		if err != nil {
+			return errs.New("failed to marshal failed users: %w", err)
+		}
+		if err := os.WriteFile(cfg.FailedOutputFile, failedData, 0600); err != nil {
+			return errs.New("failed to write failed users file: %w", err)
+		}
+		log.Info("Failed users written", zap.String("output", cfg.FailedOutputFile), zap.Int("count", len(allFailed)))
+	}
+
 	return nil
 }
 
-func sendImportBatch(ctx context.Context, client *http.Client, importURL, tenantID, apiKey string, users []FusionAuthUser) (err error) {
-	body, err := json.Marshal(FusionAuthImport{
-		Users:            users,
-		ValidateDBSchema: true,
-	})
+// postImportBatch executes the HTTP POST to the FA import endpoint and returns the
+// status code and response body. The caller is responsible for interpreting the result.
+func postImportBatch(ctx context.Context, client *http.Client, importURL, tenantID, apiKey string, payload FusionAuthImport) (status int, respBody []byte, err error) {
+	raw, err := json.Marshal(payload)
 	if err != nil {
-		return errs.New("marshal batch: %w", err)
+		return 0, nil, errs.New("marshal batch: %w", err)
 	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, importURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, importURL, bytes.NewReader(raw))
 	if err != nil {
-		return errs.New("create request: %w", err)
+		return 0, nil, errs.New("create request: %w", err)
 	}
 	req.Header.Set("Authorization", apiKey)
 	req.Header.Set("Content-Type", "application/json")
@@ -162,15 +185,25 @@ func sendImportBatch(ctx context.Context, client *http.Client, importURL, tenant
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return errs.New("http request: %w", err)
+		return 0, nil, errs.New("http request: %w", err)
 	}
 	defer func() { err = errs.Combine(err, resp.Body.Close()) }()
 
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return errs.New("unexpected status %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
-	}
+	respBody, _ = io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	return resp.StatusCode, respBody, nil
+}
 
+func sendImportBatch(ctx context.Context, client *http.Client, importURL, tenantID, apiKey string, users []FusionAuthUser) error {
+	status, respBody, err := postImportBatch(ctx, client, importURL, tenantID, apiKey, FusionAuthImport{
+		Users:            users,
+		ValidateDBSchema: true,
+	})
+	if err != nil {
+		return err
+	}
+	if status != http.StatusOK {
+		return errs.New("unexpected status %d: %s", status, strings.TrimSpace(string(respBody)))
+	}
 	return nil
 }
 
@@ -207,6 +240,120 @@ func lookupUserID(ctx context.Context, client *http.Client, baseURL, tenantID, a
 		return "", errs.New("user not found for email %q", email)
 	}
 	return result.User.ID, nil
+}
+
+// importWithSkipConflicts sends a batch using validateDbConstraints so FA identifies
+// which users already exist. Those users are logged and dropped, then the trimmed
+// batch is retried. Returns the number of users skipped and any users that failed
+// for non-conflict reasons.
+func importWithSkipConflicts(ctx context.Context, log *zap.Logger, client *http.Client, importURL, tenantID, apiKey string, users []FusionAuthUser) (int, []FailedImportUser, error) {
+	skipped := 0
+	const maxRetries = 50
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		status, respBody, err := postImportBatch(ctx, client, importURL, tenantID, apiKey, FusionAuthImport{
+			Users:                 users,
+			ValidateDBSchema:      true,
+			ValidateDbConstraints: true,
+		})
+		if err != nil {
+			return skipped, nil, err
+		}
+		if status == http.StatusOK {
+			return skipped, nil, nil
+		}
+		if status != http.StatusBadRequest {
+			return skipped, nil, errs.New("unexpected status %d: %s", status, strings.TrimSpace(string(respBody)))
+		}
+
+		// Parse fieldErrors to find which emails FA flagged as conflicts.
+		// FA returns them under "user.email" with messages like:
+		//   "A user with email [foo@example.com] already exists."
+		var errResp struct {
+			FieldErrors map[string][]struct {
+				Message string `json:"message"`
+			} `json:"fieldErrors"`
+		}
+		if jsonErr := json.Unmarshal(respBody, &errResp); jsonErr != nil || len(errResp.FieldErrors) == 0 {
+			// validateDbConstraints found nothing, but the DB insert still failed.
+			// Fall back to importing one user at a time to isolate the failures.
+			log.Warn("Batch import failed with no field-level errors, falling back to individual imports",
+				zap.Int("remaining_users", len(users)),
+				zap.String("response", strings.TrimSpace(string(respBody))))
+			failed, err := importUsersIndividually(ctx, log, client, importURL, tenantID, apiKey, users)
+			return skipped + len(failed), failed, err
+		}
+
+		conflicting := make(map[string]bool)
+		for _, fieldErrs := range errResp.FieldErrors {
+			for _, e := range fieldErrs {
+				// Extract email between the first '[' and ']'.
+				if start := strings.Index(e.Message, "["); start >= 0 {
+					if end := strings.Index(e.Message[start:], "]"); end >= 0 {
+						conflicting[strings.ToLower(e.Message[start+1:start+end])] = true
+					}
+				}
+			}
+		}
+		if len(conflicting) == 0 {
+			log.Warn("Batch import failed with unparseable field errors, falling back to individual imports",
+				zap.Int("remaining_users", len(users)),
+				zap.String("response", strings.TrimSpace(string(respBody))))
+			failed, err := importUsersIndividually(ctx, log, client, importURL, tenantID, apiKey, users)
+			return skipped + len(failed), failed, err
+		}
+
+		trimmed := make([]FusionAuthUser, 0, len(users)-len(conflicting))
+		for _, u := range users {
+			if conflicting[strings.ToLower(u.Email)] {
+				log.Debug("Skipping existing user", zap.String("email", u.Email))
+			} else {
+				trimmed = append(trimmed, u)
+			}
+		}
+		skipped += len(conflicting)
+		if len(trimmed) == 0 {
+			return skipped, nil, nil
+		}
+		users = trimmed
+	}
+	return skipped, nil, errs.New("exceeded %d retry attempts with %d users remaining", maxRetries, len(users))
+}
+
+// FailedImportUser records a user that could not be imported and the reason.
+type FailedImportUser struct {
+	Email string         `json:"email"`
+	Error string         `json:"error"`
+	User  FusionAuthUser `json:"user"`
+}
+
+// importUsersIndividually imports users one at a time, collecting any that fail.
+// Returns (failed_users, error). The error is non-nil only if the context is canceled.
+func importUsersIndividually(ctx context.Context, log *zap.Logger, client *http.Client, importURL, tenantID, apiKey string, users []FusionAuthUser) ([]FailedImportUser, error) {
+	var failed []FailedImportUser
+	imported := 0
+	for i, u := range users {
+		if ctx.Err() != nil {
+			return failed, errs.New("context canceled after importing %d/%d users individually (%d failed)", imported, len(users), len(failed))
+		}
+		if err := sendImportBatch(ctx, client, importURL, tenantID, apiKey, []FusionAuthUser{u}); err != nil {
+			log.Warn("Skipping user that failed individual import",
+				zap.String("email", u.Email),
+				zap.Error(err))
+			failed = append(failed, FailedImportUser{Email: u.Email, Error: err.Error(), User: u})
+		} else {
+			imported++
+			if imported%50 == 0 || i == len(users)-1 {
+				log.Info("Individual import progress",
+					zap.Int("imported", imported),
+					zap.Int("failed", len(failed)),
+					zap.Int("remaining", len(users)-i-1))
+			}
+		}
+	}
+	log.Info("Individual import complete",
+		zap.Int("imported", imported),
+		zap.Int("failed", len(failed)))
+	return failed, nil
 }
 
 // linkIdentityProviderRequest is the request body for POST /api/identity-provider/link.

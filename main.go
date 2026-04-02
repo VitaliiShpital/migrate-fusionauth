@@ -227,6 +227,8 @@ func init() {
 	imf.StringVar(&importCfg.InputFile, "input", "fusionauth-import.json", "Import JSON file produced by the export command")
 	imf.IntVar(&importCfg.BatchSize, "batch-size", 1000, "Number of users per import request")
 	imf.BoolVar(&importCfg.DryRun, "dry-run", false, "Print batch plan without sending any requests")
+	imf.BoolVar(&importCfg.SkipExisting, "skip-existing", false, "Check each user before importing and skip those already in FusionAuth")
+	imf.StringVar(&importCfg.FailedOutputFile, "failed-output", "failed-import-users.json", "Output file for users that could not be imported")
 	rootCmd.AddCommand(importCmd)
 }
 
